@@ -2,18 +2,30 @@ import wisp.{type Request, type Response}
 import gleam/string_builder
 import gleam/http
 import midori/web.{type Context}
+import gleam/erlang/file
 
-const html = "<!DOCTYPE html>
+const html = "
+<!DOCTYPE html>
 <html lang=\"en\">
-  <head>
-    <meta charset=\"utf-8\">
-    <title>Wisp Example</title>
-    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1\">
-    <link rel=\"stylesheet\" href=\"/static/styles.css\">
-  </head>
-  <body>
-    <script src=\"/static/main.js\"></script>
-  </body>
+
+<head>
+    <meta charset=\"UTF-8\" />
+    <meta name=\"viewport\" content=\"width=device-width, initial-scale=1.0\" />
+    <title>gchessboard</title>
+
+    <style>
+        body {
+            background-color: #97AC9B;
+        }
+    </style>
+
+    <script type=\"module\" src=\"/static/index.js\"></script>
+</head>
+
+<body>
+    <div data-lustre-app></div>
+</body>
+
 </html>
 "
 
