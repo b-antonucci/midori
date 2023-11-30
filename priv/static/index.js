@@ -1,4 +1,4 @@
-import { main } from "/static/ui/javascript/gchessboard/gchessboard.mjs";
+import { main } from "/static/ui/javascript/ui/ui.mjs";
 
 document.addEventListener("DOMContentLoaded", () => {
     main();

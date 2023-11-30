@@ -13,3 +13,4 @@ packages = [
 gchessboard = { path = "gchessboard" }
 gleam_stdlib = { version = "~> 0.32" }
 gleeunit = { version = "~> 1.0" }
+lustre = { version = "~> 3.0" }
