@@ -1,8 +1,6 @@
 import wisp.{type Request, type Response}
 import gleam/string_builder
-import gleam/http
 import midori/web.{type Context}
-import gleam/erlang/file
 
 const html = "
 <!DOCTYPE html>
@@ -30,6 +28,6 @@ const html = "
 "
 
 pub fn handle_request(req: Request, ctx: Context) -> Response {
-  use req <- web.middleware(req, ctx)
+  use _req <- web.middleware(req, ctx)
   wisp.html_response(string_builder.from_string(html), 200)
 }

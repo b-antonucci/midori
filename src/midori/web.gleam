@@ -16,7 +16,7 @@ pub fn middleware(
   use <- wisp.serve_static(
     req,
     under: "/assets",
-    from: ctx.static_directory <> "/gchessboard/assets",
+    from: ctx.static_directory <> "/assets",
   )
   use <- wisp.serve_static(req, under: "/static", from: ctx.static_directory)
 

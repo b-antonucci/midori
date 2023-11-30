@@ -1,6 +1,6 @@
-git clone https://github.com/macroby/gchessboard.git
 cd ui
 gleam build
 cd ..
-cp ui/build/dev/javascript/gchessboard priv/static/ -r
+cp ui/build/dev/javascript/ priv/static/ui/ -r
+cp ui/gchessboard/assets priv/static/ -r
 gleam run
