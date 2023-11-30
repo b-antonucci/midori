@@ -1,6 +1,3 @@
-[submodule "gchessboard"]
-	path = gchessboard
-	url = https://github.com/macroby/gchessboard.git
 [submodule "ui/gchessboard"]
 	path = ui/gchessboard
 	url = https://github.com/macroby/gchessboard.git
