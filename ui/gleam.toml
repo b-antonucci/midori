@@ -1,0 +1,11 @@
+name = "ui"
+version = "0.1.0"
+target = "javascript"
+
+
+[dependencies]
+gchessboard = { path = "gchessboard" }
+gleam_stdlib = "~> 0.32"
+
+[dev-dependencies]
+gleeunit = "~> 1.0"
