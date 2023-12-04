@@ -9,10 +9,10 @@ import gleam/bytes_builder
 import gleam/otp/actor
 import gleam/option.{Some}
 import gleam/io
+import ids/uuid
 
 pub fn main() {
   let selector = process.new_selector()
-  let state = Nil
 
   wisp.configure_logger()
   let secret_key_base = wisp.random_string(64)
@@ -34,7 +34,10 @@ pub fn main() {
         ["ws"] ->
           mist.websocket(
             request: req,
-            on_init: fn() { #(state, Some(selector)) },
+            on_init: fn() {
+              let assert Ok(id) = uuid.generate_v7()
+              #(id, Some(selector))
+            },
             on_close: fn(_state) { io.println("goodbye!") },
             handler: handle_ws_message,
           )
