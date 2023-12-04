@@ -1,4 +1,4 @@
-import position.{Position, to_int}
+import position.{Position}
 import rank.{Four, One, Three, Two}
 import file.{A, B, C, D, E, F, G, H}
 import types.{type MoveData, White}
@@ -7,17 +7,37 @@ import gleam/option.{Some}
 import lustre.{application}
 import gchessboard.{Set, init, update, view}
 
+pub type Websocket
+
 @external(javascript, "./ffi.js", "alert_js")
 pub fn alert_js(message: Int) -> Nil
 
+@external(javascript, "./ffi.js", "ws_onmessage_js")
+pub fn ws_onmessage_js(socket: Websocket, callback: fn(String) -> Nil) -> Nil
+
+@external(javascript, "./ffi.js", "ws_onopen_js")
+pub fn ws_onopen_js(socket: Websocket, callback: fn() -> Nil) -> Nil
+
+@external(javascript, "./ffi.js", "ws_onclose_js")
+pub fn ws_onclose_js(socket: Websocket, callback: fn() -> Nil) -> Nil
+
+@external(javascript, "./ffi.js", "ws_onerror_js")
+pub fn ws_onerror_js(socket: Websocket, callback: fn() -> Nil) -> Nil
+
+@external(javascript, "./ffi.js", "ws_send_js")
+pub fn ws_send_js(socket: Websocket, message: String) -> Nil
+
+@external(javascript, "./ffi.js", "ws_init_js")
+pub fn ws_init_js() -> Websocket
+
 pub fn main() {
+  let socket = ws_init_js()
   let app = application(init, update, view)
   let assert Ok(interface) = lustre.start(app, "[data-lustre-app]", Nil)
 
   let after = fn(move_data) {
-    let move_data: MoveData = move_data
-    let from = move_data.from
-    alert_js(to_int(from))
+    let _move_data: MoveData = move_data
+    ws_send_js(socket, "move")
     Nil
   }
 
