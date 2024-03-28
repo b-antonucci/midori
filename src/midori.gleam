@@ -1,4 +1,4 @@
-import gleam/erlang/process
+import gleam/erlang/process.{type Subject}
 import mist.{type Connection, type ResponseData}
 import wisp
 import midori/router
@@ -11,12 +11,19 @@ import gleam/otp/task
 import gleam/option.{Some}
 import gleam/io
 import ids/uuid
+import midori/ping_server.{type PingServerMessage}
+
+type State {
+  State(id: String, ping_server_subject: Subject(PingServerMessage))
+}
 
 pub fn main() {
   let selector = process.new_selector()
 
   wisp.configure_logger()
   let secret_key_base = wisp.random_string(64)
+
+  let assert Ok(ping_server_subject) = ping_server.start_ping_server()
 
   // A context is constructed holding the static directory path.
   let ctx = Context(static_directory: static_directory())
@@ -37,7 +44,8 @@ pub fn main() {
             request: req,
             on_init: fn(_websocket) {
               let assert Ok(id) = uuid.generate_v7()
-              #(id, Some(selector))
+              let state = State(id, ping_server_subject)
+              #(state, Some(selector))
             },
             on_close: fn(_state) { io.println("goodbye!") },
             handler: handle_ws_message,
@@ -72,11 +80,14 @@ pub type MyMessage {
   Broadcast(String)
 }
 
-fn handle_ws_message(state, conn, message) {
+fn handle_ws_message(state: State, conn, message) {
   case message {
     mist.Text("ping") -> {
-      process.sleep(5000)
-      let assert Ok(_) = mist.send_text_frame(conn, "pong")
+      process.send(state.ping_server_subject, ping_server.Ping(conn))
+      actor.continue(state)
+    }
+    mist.Text("move") -> {
+      let assert Ok(_) = mist.send_text_frame(conn, "moved")
       actor.continue(state)
     }
     mist.Text(_) | mist.Binary(_) -> {
