@@ -55,6 +55,7 @@ export function ws_onerror_js(socket, callback) {
   socket.onerror = callback;
 }
 
-export function ws_send_js(socket, message) {
-  socket.send(message);
+export function ws_send_move_js(socket, message) {
+  message = Object.assign({ type: "move" }, message);
+  socket.send(JSON.stringify(message));
 }

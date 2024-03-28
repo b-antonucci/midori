@@ -1,13 +1,18 @@
-import position.{Position}
+import position.{Position, to_int}
 import rank.{Four, One, Three, Two}
 import file.{A, B, C, D, E, F, G, H}
 import types.{type MoveData, White}
 import config.{type Config, Config, Moveable}
 import gleam/option.{Some}
+import gleam/int.{to_string}
 import lustre.{application}
 import gchessboard.{Set, init, update, view}
 
 pub type Websocket
+
+pub type ApplyMoveMessage {
+  ApplyMoveMessage(move: String)
+}
 
 @external(javascript, "./ffi.js", "alert_js")
 pub fn alert_js(message: Int) -> Nil
@@ -24,8 +29,8 @@ pub fn ws_onclose_js(socket: Websocket, callback: fn() -> Nil) -> Nil
 @external(javascript, "./ffi.js", "ws_onerror_js")
 pub fn ws_onerror_js(socket: Websocket, callback: fn() -> Nil) -> Nil
 
-@external(javascript, "./ffi.js", "ws_send_js")
-pub fn ws_send_js(socket: Websocket, message: String) -> Nil
+@external(javascript, "./ffi.js", "ws_send_move_js")
+pub fn ws_send_move_js(socket: Websocket, message: ApplyMoveMessage) -> Nil
 
 @external(javascript, "./ffi.js", "ws_init_js")
 pub fn ws_init_js() -> Websocket
@@ -36,8 +41,14 @@ pub fn main() {
   let assert Ok(interface) = lustre.start(app, "[data-lustre-app]", Nil)
 
   let after = fn(move_data) {
-    let _move_data: MoveData = move_data
-    ws_send_js(socket, "move")
+    let move_data: MoveData = move_data
+    let from = position.to_int(move_data.from)
+    let to = position.to_int(move_data.to)
+    let from_as_string = int.to_string(from)
+    let to_as_string = int.to_string(to)
+    let move = from_as_string <> "-" <> to_as_string
+
+    ws_send_move_js(socket, ApplyMoveMessage(move))
     Nil
   }
 

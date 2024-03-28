@@ -7,14 +7,19 @@ import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/bytes_builder
 import gleam/otp/actor
-import gleam/otp/task
 import gleam/option.{Some}
 import gleam/io
 import ids/uuid
 import midori/ping_server.{type PingServerMessage}
+import gleam/json
+import gleam/dynamic.{field, int, list, string}
 
 type State {
   State(id: String, ping_server_subject: Subject(PingServerMessage))
+}
+
+type ApplyMoveMessage {
+  ApplyMoveMessage(move: String)
 }
 
 pub fn main() {
@@ -86,8 +91,22 @@ fn handle_ws_message(state: State, conn, message) {
       process.send(state.ping_server_subject, ping_server.Ping(conn))
       actor.continue(state)
     }
-    mist.Text("move") -> {
-      let assert Ok(_) = mist.send_text_frame(conn, "moved")
+    mist.Text(m) -> {
+      let message_decoder =
+        dynamic.decode1(ApplyMoveMessage, field("move", string))
+
+      case json.decode(m, message_decoder) {
+        Ok(ApplyMoveMessage(move)) -> {
+          let assert Ok(_) = mist.send_text_frame(conn, move)
+          actor.continue(state)
+        }
+        Error(_) -> {
+          io.println("Failed to decode message")
+          actor.continue(state)
+        }
+      }
+
+      io.println(m)
       actor.continue(state)
     }
     mist.Text(_) | mist.Binary(_) -> {
