@@ -7,6 +7,7 @@ import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/bytes_builder
 import gleam/otp/actor
+import gleam/otp/task
 import gleam/option.{Some}
 import gleam/io
 import ids/uuid
@@ -34,7 +35,7 @@ pub fn main() {
         ["ws"] ->
           mist.websocket(
             request: req,
-            on_init: fn() {
+            on_init: fn(_websocket) {
               let assert Ok(id) = uuid.generate_v7()
               #(id, Some(selector))
             },
@@ -73,15 +74,16 @@ pub type MyMessage {
 
 fn handle_ws_message(state, conn, message) {
   case message {
-    mist.Text(<<"ping":utf8>>) -> {
-      let assert Ok(_) = mist.send_text_frame(conn, <<"pong":utf8>>)
+    mist.Text("ping") -> {
+      process.sleep(5000)
+      let assert Ok(_) = mist.send_text_frame(conn, "pong")
       actor.continue(state)
     }
     mist.Text(_) | mist.Binary(_) -> {
       actor.continue(state)
     }
     mist.Custom(Broadcast(text)) -> {
-      let assert Ok(_) = mist.send_text_frame(conn, <<text:utf8>>)
+      let assert Ok(_) = mist.send_text_frame(conn, text)
       actor.continue(state)
     }
     mist.Closed | mist.Shutdown -> actor.Stop(process.Normal)

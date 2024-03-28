@@ -12,6 +12,11 @@ export function ws_init_js() {
   };
 
   socket.onmessage = function (event) {
+    // on ping
+    if (event.data === "pong") {
+      socket.send("ping");
+      return;
+    }
     // alert(`[message] Data received from server: ${event.data}`);
   };
 

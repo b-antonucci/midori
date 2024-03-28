@@ -1,5 +1,5 @@
 import gleam/otp/actor
-import gleam/map.{type Map}
+import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject}
 import move.{type Move}
 import game_server.{type Message, apply_move, new_game_from_fen}
@@ -13,12 +13,12 @@ pub type GameManagerMessage(element) {
 
 fn handle_message(
   message: GameManagerMessage(e),
-  game_map: Map(String, Subject(Message)),
-) -> actor.Next(GameManagerMessage(e), Map(String, Subject(Message))) {
+  game_map: Dict(String, Subject(Message)),
+) -> actor.Next(GameManagerMessage(e), Dict(String, Subject(Message))) {
   case message {
     Shutdown -> actor.Stop(process.Normal)
     ApplyMove(_client, uuid, move) -> {
-      let assert Ok(server) = map.get(game_map, uuid)
+      let assert Ok(server) = dict.get(game_map, uuid)
       apply_move(server, move)
       actor.continue(game_map)
     }
@@ -29,7 +29,7 @@ fn handle_message(
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
       )
       let assert Ok(id) = uuid.generate_v7()
-      map.insert(game_map, id, server)
+      dict.insert(game_map, id, server)
       process.send(client, id)
       actor.continue(game_map)
     }
@@ -37,7 +37,7 @@ fn handle_message(
 }
 
 pub fn new_manager() {
-  let game_map = map.new()
+  let game_map = dict.new()
   let assert Ok(actor) = actor.start(game_map, handle_message)
   actor
 }

@@ -1,4 +1,5 @@
 cd ui
+git clone git@github.com:macroby/gchessboard.git
 gleam build
 cd ..
 mkdir priv

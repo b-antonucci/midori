@@ -42,82 +42,86 @@ pub fn main() {
   }
 
   let config =
-    Config(moveable: Some(Moveable(
-      player: Some(White),
-      after: Some(after),
-      moves: Some(types.Moves(moves: [
-        #(
-          types.Origin(origin: Position(file: B, rank: One)),
-          types.Destinations(destinations: [
-            Position(file: A, rank: Three),
-            Position(file: C, rank: Three),
+    Config(
+      moveable: Some(Moveable(
+        player: Some(White),
+        after: Some(after),
+        moves: Some(
+          types.Moves(moves: [
+            #(
+              types.Origin(origin: Position(file: B, rank: One)),
+              types.Destinations(destinations: [
+                Position(file: A, rank: Three),
+                Position(file: C, rank: Three),
+              ]),
+            ),
+            #(
+              types.Origin(origin: Position(file: G, rank: One)),
+              types.Destinations(destinations: [
+                Position(file: F, rank: Three),
+                Position(file: H, rank: Three),
+              ]),
+            ),
+            #(
+              types.Origin(origin: Position(file: A, rank: Two)),
+              types.Destinations(destinations: [
+                Position(file: A, rank: Three),
+                Position(file: A, rank: Four),
+              ]),
+            ),
+            #(
+              types.Origin(origin: Position(file: B, rank: Two)),
+              types.Destinations(destinations: [
+                Position(file: B, rank: Three),
+                Position(file: B, rank: Four),
+              ]),
+            ),
+            #(
+              types.Origin(origin: Position(file: C, rank: Two)),
+              types.Destinations(destinations: [
+                Position(file: C, rank: Three),
+                Position(file: C, rank: Four),
+              ]),
+            ),
+            #(
+              types.Origin(origin: Position(file: D, rank: Two)),
+              types.Destinations(destinations: [
+                Position(file: D, rank: Three),
+                Position(file: D, rank: Four),
+              ]),
+            ),
+            #(
+              types.Origin(origin: Position(file: E, rank: Two)),
+              types.Destinations(destinations: [
+                Position(file: E, rank: Three),
+                Position(file: E, rank: Four),
+              ]),
+            ),
+            #(
+              types.Origin(origin: Position(file: F, rank: Two)),
+              types.Destinations(destinations: [
+                Position(file: F, rank: Three),
+                Position(file: F, rank: Four),
+              ]),
+            ),
+            #(
+              types.Origin(origin: Position(file: G, rank: Two)),
+              types.Destinations(destinations: [
+                Position(file: G, rank: Three),
+                Position(file: G, rank: Four),
+              ]),
+            ),
+            #(
+              types.Origin(origin: Position(file: H, rank: Two)),
+              types.Destinations(destinations: [
+                Position(file: H, rank: Three),
+                Position(file: H, rank: Four),
+              ]),
+            ),
           ]),
         ),
-        #(
-          types.Origin(origin: Position(file: G, rank: One)),
-          types.Destinations(destinations: [
-            Position(file: F, rank: Three),
-            Position(file: H, rank: Three),
-          ]),
-        ),
-        #(
-          types.Origin(origin: Position(file: A, rank: Two)),
-          types.Destinations(destinations: [
-            Position(file: A, rank: Three),
-            Position(file: A, rank: Four),
-          ]),
-        ),
-        #(
-          types.Origin(origin: Position(file: B, rank: Two)),
-          types.Destinations(destinations: [
-            Position(file: B, rank: Three),
-            Position(file: B, rank: Four),
-          ]),
-        ),
-        #(
-          types.Origin(origin: Position(file: C, rank: Two)),
-          types.Destinations(destinations: [
-            Position(file: C, rank: Three),
-            Position(file: C, rank: Four),
-          ]),
-        ),
-        #(
-          types.Origin(origin: Position(file: D, rank: Two)),
-          types.Destinations(destinations: [
-            Position(file: D, rank: Three),
-            Position(file: D, rank: Four),
-          ]),
-        ),
-        #(
-          types.Origin(origin: Position(file: E, rank: Two)),
-          types.Destinations(destinations: [
-            Position(file: E, rank: Three),
-            Position(file: E, rank: Four),
-          ]),
-        ),
-        #(
-          types.Origin(origin: Position(file: F, rank: Two)),
-          types.Destinations(destinations: [
-            Position(file: F, rank: Three),
-            Position(file: F, rank: Four),
-          ]),
-        ),
-        #(
-          types.Origin(origin: Position(file: G, rank: Two)),
-          types.Destinations(destinations: [
-            Position(file: G, rank: Three),
-            Position(file: G, rank: Four),
-          ]),
-        ),
-        #(
-          types.Origin(origin: Position(file: H, rank: Two)),
-          types.Destinations(destinations: [
-            Position(file: H, rank: Three),
-            Position(file: H, rank: Four),
-          ]),
-        ),
-      ])),
-    )))
+      )),
+    )
 
   interface(Set(config))
 
