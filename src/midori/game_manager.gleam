@@ -1,25 +1,33 @@
 import gleam/otp/actor
 import gleam/dict.{type Dict}
+import gleam/list
+import gleam/int
 import gleam/erlang/process.{type Subject}
 import move.{type Move}
 import game_server.{type Message, apply_move, new_game_from_fen}
 import ids/uuid
+import midori/uci_move.{type UciMove}
 
-pub type GameManagerMessage(element) {
+pub type GameManagerMessage {
   Shutdown
-  ApplyMove(reply_with: Subject(List(Move)), uuid: String, move: Move)
+  ApplyMove(reply_with: Subject(List(Move)), uuid: String, move: UciMove)
   NewGame(reply_with: Subject(String))
 }
 
 fn handle_message(
-  message: GameManagerMessage(e),
+  message: GameManagerMessage,
   game_map: Dict(String, Subject(Message)),
-) -> actor.Next(GameManagerMessage(e), Dict(String, Subject(Message))) {
+) -> actor.Next(GameManagerMessage, Dict(String, Subject(Message))) {
   case message {
     Shutdown -> actor.Stop(process.Normal)
-    ApplyMove(_client, uuid, move) -> {
+    ApplyMove(client, uuid, move) -> {
       let assert Ok(server) = dict.get(game_map, uuid)
-      apply_move(server, move)
+      game_server.apply_move_uci_string(server, move.move)
+      let legal_moves = game_server.all_legal_moves(server)
+      let length = list.length(legal_moves)
+      let assert Ok(random_move) = list.at(legal_moves, int.random(length - 1))
+      game_server.apply_move(server, random_move)
+      process.send(client, game_server.all_legal_moves(server))
       actor.continue(game_map)
     }
     NewGame(client) -> {
@@ -36,8 +44,8 @@ fn handle_message(
   }
 }
 
-pub fn new_manager() {
+pub fn start_game_manager() {
   let game_map = dict.new()
-  let assert Ok(actor) = actor.start(game_map, handle_message)
+  let actor = actor.start(game_map, handle_message)
   actor
 }

@@ -2,24 +2,79 @@ import gleam/erlang/process.{type Subject}
 import mist.{type Connection, type ResponseData}
 import wisp
 import midori/router
+import midori/uci_move.{type UciMove, convert_move}
 import midori/web.{Context}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/bytes_builder
 import gleam/otp/actor
-import gleam/option.{Some}
+import gleam/option.{None, Some}
 import gleam/io
+import gleam/string
+import gleam/list
+import gleam/int
+import move.{type Move, Castle, EnPassant, Normal}
+import piece.{type Piece, Bishop, King, Knight, Pawn, Queen, Rook}
+import position.{type Position, to_string}
 import ids/uuid
 import midori/ping_server.{type PingServerMessage}
-import gleam/json
+import midori/game_manager.{type GameManagerMessage}
 import gleam/dynamic.{field, int, list, string}
+import gleam/json.{array, int as json_int, null, object, string as json_string}
 
 type State {
-  State(id: String, ping_server_subject: Subject(PingServerMessage))
+  State(
+    id: String,
+    ping_server_subject: Subject(PingServerMessage),
+    game_manager_subject: Subject(GameManagerMessage),
+  )
 }
 
 type ApplyMoveMessage {
   ApplyMoveMessage(move: String)
+}
+
+pub type UpdateGameMessage {
+  UpdateGameMessage(legal_moves: List(String))
+}
+
+type LegalMoves =
+  List(Move)
+
+pub fn legal_moves_to_legal_uci_moves(legal_moves: LegalMoves) -> List(String) {
+  legal_moves
+  |> list.map(fn(move) {
+    case move {
+      Normal(from, to, _captured, promotion) -> {
+        let promotion_string = case promotion {
+          None -> ""
+          Some(promotion) ->
+            case promotion.kind {
+              Queen -> "q"
+              Rook -> "r"
+              Bishop -> "b"
+              Knight -> "n"
+              _ -> panic("Invalid promotion")
+            }
+        }
+
+        to_string(from) <> to_string(to) <> promotion_string
+      }
+      Castle(from, to) -> {
+        to_string(from) <> to_string(to)
+      }
+      EnPassant(from, to) -> {
+        to_string(from) <> to_string(to)
+      }
+    }
+  })
+}
+
+pub fn update_game_message_to_json(
+  update_game_message: UpdateGameMessage,
+) -> String {
+  object([#("moves", array(update_game_message.legal_moves, of: json_string))])
+  |> json.to_string
 }
 
 pub fn main() {
@@ -29,6 +84,7 @@ pub fn main() {
   let secret_key_base = wisp.random_string(64)
 
   let assert Ok(ping_server_subject) = ping_server.start_ping_server()
+  let assert Ok(game_manager_subject) = game_manager.start_game_manager()
 
   // A context is constructed holding the static directory path.
   let ctx = Context(static_directory: static_directory())
@@ -48,8 +104,10 @@ pub fn main() {
           mist.websocket(
             request: req,
             on_init: fn(_websocket) {
-              let assert Ok(id) = uuid.generate_v7()
-              let state = State(id, ping_server_subject)
+              let id =
+                process.call(game_manager_subject, game_manager.NewGame, 10)
+              io.println("New game created with id: " <> id)
+              let state = State(id, ping_server_subject, game_manager_subject)
               #(state, Some(selector))
             },
             on_close: fn(_state) { io.println("goodbye!") },
@@ -97,7 +155,19 @@ fn handle_ws_message(state: State, conn, message) {
 
       case json.decode(m, message_decoder) {
         Ok(ApplyMoveMessage(move)) -> {
-          let assert Ok(_) = mist.send_text_frame(conn, move)
+          let legal_moves =
+            process.call(
+              state.game_manager_subject,
+              game_manager.ApplyMove(_, state.id, convert_move(move)),
+              10,
+            )
+
+          let legal_uci_moves = legal_moves_to_legal_uci_moves(legal_moves)
+          let update_game_message = UpdateGameMessage(legal_uci_moves)
+          let json = update_game_message_to_json(update_game_message)
+
+          let assert Ok(_) = mist.send_text_frame(conn, json)
+
           actor.continue(state)
         }
         Error(_) -> {
