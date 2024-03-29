@@ -2,7 +2,7 @@ import gleam/erlang/process.{type Subject}
 import mist.{type Connection, type ResponseData}
 import wisp
 import midori/router
-import midori/uci_move.{type UciMove, convert_move}
+import midori/uci_move.{convert_move}
 import midori/web.{Context}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
@@ -10,16 +10,14 @@ import gleam/bytes_builder
 import gleam/otp/actor
 import gleam/option.{None, Some}
 import gleam/io
-import gleam/string
 import gleam/list
-import gleam/int
 import move.{type Move, Castle, EnPassant, Normal}
-import piece.{type Piece, Bishop, King, Knight, Pawn, Queen, Rook}
-import position.{type Position, to_string}
+import piece.{Bishop, Knight, Queen, Rook}
+import position.{to_string}
 import midori/ping_server.{type PingServerMessage}
 import midori/game_manager.{type GameManagerMessage}
-import gleam/dynamic.{field, int, list, string}
-import gleam/json.{array, int as json_int, null, object, string as json_string}
+import gleam/dynamic.{field, list, string}
+import gleam/json.{array, object, string as json_string}
 
 type State {
   State(
