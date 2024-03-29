@@ -6,7 +6,7 @@ import config.{type Config, Config, Moveable}
 import gleam/option.{None, Some}
 import gleam/int
 import lustre.{application}
-import gchessboard.{Set, init, update, view}
+import gchessboard.{Set, UpdateWithFen, init, update, view}
 
 pub type Websocket
 
@@ -53,6 +53,8 @@ pub fn get_data_field_js(object: String, field: String) -> String
 
 pub fn main() {
   let socket = ws_init_js()
+  let app = application(init, update, view)
+  let assert Ok(interface) = lustre.start(app, "[data-lustre-app]", Nil)
   let on_message = fn(message) {
     case get_data_as_string_js(message) {
       "pong" -> {
@@ -61,16 +63,13 @@ pub fn main() {
       _some_data -> {
         let fen = get_data_field_js(message, "fen")
         let _moves = get_data_field_js(message, "moves")
-        alert_js_string(fen)
-
+        interface(UpdateWithFen(fen))
         Nil
       }
     }
   }
 
   ws_onmessage_js(socket, on_message)
-  let app = application(init, update, view)
-  let assert Ok(interface) = lustre.start(app, "[data-lustre-app]", Nil)
 
   let after = fn(move_data) {
     let move_data: MoveData = move_data
