@@ -1,10 +1,10 @@
-import position.{Position, to_int}
+import position.{Position}
 import rank.{Four, One, Three, Two}
 import file.{A, B, C, D, E, F, G, H}
 import types.{type MoveData, White}
 import config.{type Config, Config, Moveable}
-import gleam/option.{Some}
-import gleam/int.{to_string}
+import gleam/option.{None, Some}
+import gleam/int
 import lustre.{application}
 import gchessboard.{Set, init, update, view}
 
@@ -14,8 +14,18 @@ pub type ApplyMoveMessage {
   ApplyMoveMessage(move: String)
 }
 
+pub type UpdateGameResponse {
+  UpdateGameResponse(moves: List(String), fen: String)
+}
+
 @external(javascript, "./ffi.js", "alert_js")
 pub fn alert_js(message: Int) -> Nil
+
+@external(javascript, "./ffi.js", "alert_js")
+pub fn alert_js_string(message: String) -> Nil
+
+@external(javascript, "./ffi.js", "alert_js_object_data")
+pub fn alert_js_object_data(message: String) -> Nil
 
 @external(javascript, "./ffi.js", "ws_onmessage_js")
 pub fn ws_onmessage_js(socket: Websocket, callback: fn(String) -> Nil) -> Nil
@@ -35,8 +45,30 @@ pub fn ws_send_move_js(socket: Websocket, message: ApplyMoveMessage) -> Nil
 @external(javascript, "./ffi.js", "ws_init_js")
 pub fn ws_init_js() -> Websocket
 
+@external(javascript, "./ffi.js", "get_data_as_string_js")
+pub fn get_data_as_string_js(object: String) -> String
+
+@external(javascript, "./ffi.js", "get_data_field_js")
+pub fn get_data_field_js(object: String, field: String) -> String
+
 pub fn main() {
   let socket = ws_init_js()
+  let on_message = fn(message) {
+    case get_data_as_string_js(message) {
+      "pong" -> {
+        Nil
+      }
+      _some_data -> {
+        let fen = get_data_field_js(message, "fen")
+        let _moves = get_data_field_js(message, "moves")
+        alert_js_string(fen)
+
+        Nil
+      }
+    }
+  }
+
+  ws_onmessage_js(socket, on_message)
   let app = application(init, update, view)
   let assert Ok(interface) = lustre.start(app, "[data-lustre-app]", Nil)
 
@@ -56,6 +88,7 @@ pub fn main() {
     Config(
       moveable: Some(Moveable(
         player: Some(White),
+        fen: None,
         after: Some(after),
         moves: Some(
           types.Moves(moves: [

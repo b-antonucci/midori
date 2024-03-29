@@ -2,6 +2,19 @@ export function alert_js(message) {
   alert(message);
 }
 
+export function alert_js_object_data(message) {
+  alert(message.data);
+}
+
+export function get_data_as_string_js(some_object) {
+  return some_object.data;
+}
+
+export function get_data_field_js(some_object, field) {
+  let data_object = JSON.parse(some_object.data);
+  return data_object[field];
+}
+
 export function ws_init_js() {
   const socket = new WebSocket("ws://localhost:8000/ws");
 
