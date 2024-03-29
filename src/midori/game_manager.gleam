@@ -4,14 +4,18 @@ import gleam/list
 import gleam/int
 import gleam/erlang/process.{type Subject}
 import move.{type Move}
-import game_server.{type Message, apply_move, new_game_from_fen}
+import game_server.{type Message, new_game_from_fen}
 import ids/uuid
 import midori/uci_move.{type UciMove}
 
 pub type GameManagerMessage {
   Shutdown
-  ApplyMove(reply_with: Subject(List(Move)), uuid: String, move: UciMove)
+  ApplyMove(reply_with: Subject(ApplyMoveResult), id: String, move: UciMove)
   NewGame(reply_with: Subject(String))
+}
+
+pub type ApplyMoveResult {
+  ApplyMoveResult(legal_moves: List(Move), fen: String)
 }
 
 fn handle_message(
@@ -20,14 +24,21 @@ fn handle_message(
 ) -> actor.Next(GameManagerMessage, Dict(String, Subject(Message))) {
   case message {
     Shutdown -> actor.Stop(process.Normal)
-    ApplyMove(client, uuid, move) -> {
-      let assert Ok(server) = dict.get(game_map, uuid)
+    ApplyMove(client, id, move) -> {
+      let assert Ok(server) = dict.get(game_map, id)
       game_server.apply_move_uci_string(server, move.move)
       let legal_moves = game_server.all_legal_moves(server)
       let length = list.length(legal_moves)
-      let assert Ok(random_move) = list.at(legal_moves, int.random(length - 1))
+      let random_index = int.random(length)
+      let assert Ok(random_move) = list.at(legal_moves, random_index)
       game_server.apply_move(server, random_move)
-      process.send(client, game_server.all_legal_moves(server))
+
+      let response =
+        ApplyMoveResult(
+          legal_moves: game_server.all_legal_moves(server),
+          fen: game_server.get_fen(server),
+        )
+      process.send(client, response)
       actor.continue(game_map)
     }
     NewGame(client) -> {
@@ -37,7 +48,7 @@ fn handle_message(
         "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
       )
       let assert Ok(id) = uuid.generate_v7()
-      dict.insert(game_map, id, server)
+      let game_map = dict.insert(game_map, id, server)
       process.send(client, id)
       actor.continue(game_map)
     }

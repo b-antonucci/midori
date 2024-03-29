@@ -16,7 +16,6 @@ import gleam/int
 import move.{type Move, Castle, EnPassant, Normal}
 import piece.{type Piece, Bishop, King, Knight, Pawn, Queen, Rook}
 import position.{type Position, to_string}
-import ids/uuid
 import midori/ping_server.{type PingServerMessage}
 import midori/game_manager.{type GameManagerMessage}
 import gleam/dynamic.{field, int, list, string}
@@ -35,7 +34,7 @@ type ApplyMoveMessage {
 }
 
 pub type UpdateGameMessage {
-  UpdateGameMessage(legal_moves: List(String))
+  UpdateGameMessage(moves: List(String), fen: String)
 }
 
 type LegalMoves =
@@ -73,7 +72,10 @@ pub fn legal_moves_to_legal_uci_moves(legal_moves: LegalMoves) -> List(String) {
 pub fn update_game_message_to_json(
   update_game_message: UpdateGameMessage,
 ) -> String {
-  object([#("moves", array(update_game_message.legal_moves, of: json_string))])
+  object([
+    #("moves", array(update_game_message.moves, of: json_string)),
+    #("fen", json_string(update_game_message.fen)),
+  ])
   |> json.to_string
 }
 
@@ -106,7 +108,6 @@ pub fn main() {
             on_init: fn(_websocket) {
               let id =
                 process.call(game_manager_subject, game_manager.NewGame, 10)
-              io.println("New game created with id: " <> id)
               let state = State(id, ping_server_subject, game_manager_subject)
               #(state, Some(selector))
             },
@@ -149,21 +150,25 @@ fn handle_ws_message(state: State, conn, message) {
       process.send(state.ping_server_subject, ping_server.Ping(conn))
       actor.continue(state)
     }
-    mist.Text(m) -> {
+    mist.Text(ws_message) -> {
       let message_decoder =
         dynamic.decode1(ApplyMoveMessage, field("move", string))
 
-      case json.decode(m, message_decoder) {
+      case json.decode(ws_message, message_decoder) {
         Ok(ApplyMoveMessage(move)) -> {
-          let legal_moves =
+          let game_manager_response =
             process.call(
               state.game_manager_subject,
               game_manager.ApplyMove(_, state.id, convert_move(move)),
               10,
             )
-
-          let legal_uci_moves = legal_moves_to_legal_uci_moves(legal_moves)
-          let update_game_message = UpdateGameMessage(legal_uci_moves)
+          let legal_uci_moves =
+            legal_moves_to_legal_uci_moves(game_manager_response.legal_moves)
+          let update_game_message =
+            UpdateGameMessage(
+              moves: legal_uci_moves,
+              fen: game_manager_response.fen,
+            )
           let json = update_game_message_to_json(update_game_message)
 
           let assert Ok(_) = mist.send_text_frame(conn, json)
@@ -176,7 +181,6 @@ fn handle_ws_message(state: State, conn, message) {
         }
       }
 
-      io.println(m)
       actor.continue(state)
     }
     mist.Text(_) | mist.Binary(_) -> {
