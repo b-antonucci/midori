@@ -15,6 +15,11 @@ export function get_data_field_js(some_object, field) {
   return data_object[field];
 }
 
+export function get_data_field_array_js(some_object, field) {
+  let data_object = JSON.parse(some_object.data);
+  return data_object[field];
+}
+
 export function ws_init_js() {
   const socket = new WebSocket("ws://localhost:8000/ws");
 

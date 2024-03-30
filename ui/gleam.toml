@@ -6,6 +6,7 @@ target = "javascript"
 gchessboard = { path = "gchessboard" }
 gleam_stdlib = "~> 0.32"
 lustre = "~> 3.0"
+gleam_javascript = "~> 0.8"
 
 [dev-dependencies]
 gleeunit = "~> 1.0"

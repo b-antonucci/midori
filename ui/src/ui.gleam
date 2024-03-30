@@ -5,8 +5,14 @@ import types.{type MoveData, White}
 import config.{type Config, Config, Moveable}
 import gleam/option.{None, Some}
 import gleam/int
+import gleam/list
+import gleam/string
+import gleam/dict
 import lustre.{application}
-import gchessboard.{Set, UpdateWithFen, init, update, view}
+import gchessboard.{
+  NextTurn, Set, SetFen, SetMoveablePlayer, SetMoves, init, update, view,
+}
+import gleam/javascript/array.{type Array, to_list}
 
 pub type Websocket
 
@@ -19,7 +25,7 @@ pub type UpdateGameResponse {
 }
 
 @external(javascript, "./ffi.js", "alert_js")
-pub fn alert_js(message: Int) -> Nil
+pub fn alert_js(message: String) -> Nil
 
 @external(javascript, "./ffi.js", "alert_js")
 pub fn alert_js_string(message: String) -> Nil
@@ -51,6 +57,9 @@ pub fn get_data_as_string_js(object: String) -> String
 @external(javascript, "./ffi.js", "get_data_field_js")
 pub fn get_data_field_js(object: String, field: String) -> String
 
+@external(javascript, "./ffi.js", "get_data_field_array_js")
+pub fn get_data_field_array_js(object: String, field: String) -> Array(String)
+
 pub fn main() {
   let socket = ws_init_js()
   let app = application(init, update, view)
@@ -62,8 +71,81 @@ pub fn main() {
       }
       _some_data -> {
         let fen = get_data_field_js(message, "fen")
-        let _moves = get_data_field_js(message, "moves")
-        interface(UpdateWithFen(fen))
+        let moves = get_data_field_array_js(message, "moves")
+        let moves = to_list(moves)
+
+        let moves =
+          list.map(moves, fn(move) {
+            case string.length(move) {
+              4 -> {
+                [string.slice(move, 0, 2), string.slice(move, 2, 2)]
+              }
+              5 -> {
+                [
+                  string.slice(move, 0, 2),
+                  string.slice(move, 2, 2),
+                  string.slice(move, 4, 2),
+                ]
+              }
+              _ -> panic("Invalid move length")
+            }
+          })
+
+        let formatted_moves =
+          list.fold(moves, dict.new(), fn(acc, move) {
+            let acc = case move {
+              [from, to] -> {
+                let from = types.Origin(origin: position.from_string(from))
+                let to = position.from_string(to)
+                case dict.get(acc, from) {
+                  Error(_) ->
+                    dict.insert(
+                      acc,
+                      from,
+                      types.Destinations(destinations: [to]),
+                    )
+                  Ok(dests) ->
+                    dict.insert(
+                      acc,
+                      from,
+                      types.Destinations(destinations: [
+                        to,
+                        ..dests.destinations
+                      ]),
+                    )
+                }
+              }
+              [from, to, _promotion] -> {
+                let from = types.Origin(origin: position.from_string(from))
+                let to = position.from_string(to)
+                case dict.get(acc, from) {
+                  Error(_) ->
+                    dict.insert(
+                      acc,
+                      from,
+                      types.Destinations(destinations: [to]),
+                    )
+                  Ok(dests) ->
+                    dict.insert(
+                      acc,
+                      from,
+                      types.Destinations(destinations: [
+                        to,
+                        ..dests.destinations
+                      ]),
+                    )
+                }
+              }
+              _ -> panic("Invalid move length")
+            }
+            acc
+          })
+
+        let formatted_moves = dict.to_list(formatted_moves)
+        interface(SetFen(fen))
+        interface(NextTurn)
+        interface(SetMoves(Some(types.Moves(moves: formatted_moves))))
+        interface(SetMoveablePlayer(Some(White)))
         Nil
       }
     }
