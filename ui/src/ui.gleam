@@ -130,7 +130,6 @@ pub fn main() {
     let from = position.to_string(move_data.from)
     let to = position.to_string(move_data.to)
     let move = from <> "-" <> to
-    alert_js_string(move)
     ws_send_move_js(socket, ApplyMoveMessage(move))
     Nil
   }
