@@ -3,8 +3,8 @@ import gleam/dict.{type Dict}
 import gleam/list
 import gleam/int
 import gleam/erlang/process.{type Subject}
-import move.{type Move}
 import game_server.{type Message, new_game_from_fen}
+import position
 import ids/uuid
 import midori/uci_move.{type UciMove}
 
@@ -14,8 +14,14 @@ pub type GameManagerMessage {
   NewGame(reply_with: Subject(String))
 }
 
+// The first element of the tuple is the origin square
+// and the second element is a list of possible destination squares
+pub type ClientFormatMoveList {
+  ClientFormatMoveList(moves: List(#(String, List(String))))
+}
+
 pub type ApplyMoveResult {
-  ApplyMoveResult(legal_moves: List(Move), fen: String)
+  ApplyMoveResult(legal_moves: ClientFormatMoveList, fen: String)
 }
 
 fn handle_message(
@@ -32,10 +38,33 @@ fn handle_message(
       let random_index = int.random(length)
       let assert Ok(random_move) = list.at(legal_moves, random_index)
       game_server.apply_move(server, random_move)
+      let unformatted_moves = game_server.all_legal_moves(server)
+      let formatted_moves =
+        list.fold(unformatted_moves, ClientFormatMoveList(moves: []), fn(
+          acc,
+          move,
+        ) {
+          let origin = move.from
+          let origin_string = position.to_string(origin)
+          case list.find(acc.moves, fn(move) { move.0 == origin_string }) {
+            Error(_) -> {
+              let new_move = #(origin_string, [position.to_string(move.to)])
+              ClientFormatMoveList(moves: [new_move, ..acc.moves])
+            }
+            Ok(#(_, destinations)) -> {
+              let new_destinations =
+                list.append(destinations, [position.to_string(move.to)])
+              let new_move = #(origin_string, new_destinations)
+              let new_moves =
+                list.filter(acc.moves, fn(move) { move.0 != origin_string })
+              ClientFormatMoveList(moves: [new_move, ..new_moves])
+            }
+          }
+        })
 
       let response =
         ApplyMoveResult(
-          legal_moves: game_server.all_legal_moves(server),
+          legal_moves: formatted_moves,
           fen: game_server.get_fen(server),
         )
       process.send(client, response)

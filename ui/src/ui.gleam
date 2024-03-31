@@ -5,14 +5,13 @@ import types.{type MoveData, White}
 import config.{type Config, Config, Moveable}
 import gleam/option.{None, Some}
 import gleam/int
-import gleam/list
 import gleam/string
-import gleam/dict
+import gleam/list
 import lustre.{application}
 import gchessboard.{
   NextTurn, Set, SetFen, SetMoveablePlayer, SetMoves, init, update, view,
 }
-import gleam/javascript/array.{type Array, to_list}
+import gleam/javascript/array.{type Array}
 
 pub type Websocket
 
@@ -25,7 +24,7 @@ pub type UpdateGameResponse {
 }
 
 @external(javascript, "./ffi.js", "alert_js")
-pub fn alert_js(message: String) -> Nil
+pub fn alert_js(message: Int) -> Nil
 
 @external(javascript, "./ffi.js", "alert_js")
 pub fn alert_js_string(message: String) -> Nil
@@ -60,6 +59,9 @@ pub fn get_data_field_js(object: String, field: String) -> String
 @external(javascript, "./ffi.js", "get_data_field_array_js")
 pub fn get_data_field_array_js(object: String, field: String) -> Array(String)
 
+@external(javascript, "./ffi.js", "get_data_field_object_js")
+pub fn get_data_field_object_js(object: String, field: String) -> String
+
 pub fn main() {
   let socket = ws_init_js()
   let app = application(init, update, view)
@@ -71,80 +73,51 @@ pub fn main() {
       }
       _some_data -> {
         let fen = get_data_field_js(message, "fen")
-        let moves = get_data_field_array_js(message, "moves")
-        let moves = to_list(moves)
+        let moves = get_data_field_object_js(message, "moves")
 
-        let moves =
-          list.map(moves, fn(move) {
-            case string.length(move) {
-              4 -> {
-                [string.slice(move, 0, 2), string.slice(move, 2, 2)]
-              }
-              5 -> {
-                [
-                  string.slice(move, 0, 2),
-                  string.slice(move, 2, 2),
-                  string.slice(move, 4, 2),
-                ]
-              }
-              _ -> panic("Invalid move length")
-            }
+        let moves_seperated_on_origin = string.split(moves, "],")
+        let moves_seperate_origin_from_destination =
+          list.map(moves_seperated_on_origin, fn(origin_dests_raw_string) {
+            let origin_dests_split = string.split(origin_dests_raw_string, ":")
+            let assert Ok(origin_raw) = list.first(origin_dests_split)
+            let origin = string.replace(origin_raw, "\"", "")
+            let origin = string.replace(origin, "{", "")
+            let assert Ok(dests_raw) = list.at(origin_dests_split, 1)
+            let dests = string.replace(dests_raw, "[", "")
+            #(origin, dests)
+          })
+        let moves_dests_seperated =
+          list.map(moves_seperate_origin_from_destination, fn(origin_dests) {
+            let origin = origin_dests.0
+            let dests = origin_dests.1
+            let dests_seperated = string.split(dests, ",")
+            let dests_seperated_cleaned =
+              list.map(dests_seperated, fn(dest) {
+                string.replace(dest, "\"", "")
+                |> string.replace("}", "")
+                |> string.replace("]", "")
+              })
+            #(origin, dests_seperated_cleaned)
           })
 
-        let formatted_moves =
-          list.fold(moves, dict.new(), fn(acc, move) {
-            let acc = case move {
-              [from, to] -> {
-                let from = types.Origin(origin: position.from_string(from))
-                let to = position.from_string(to)
-                case dict.get(acc, from) {
-                  Error(_) ->
-                    dict.insert(
-                      acc,
-                      from,
-                      types.Destinations(destinations: [to]),
-                    )
-                  Ok(dests) ->
-                    dict.insert(
-                      acc,
-                      from,
-                      types.Destinations(destinations: [
-                        to,
-                        ..dests.destinations
-                      ]),
-                    )
-                }
-              }
-              [from, to, _promotion] -> {
-                let from = types.Origin(origin: position.from_string(from))
-                let to = position.from_string(to)
-                case dict.get(acc, from) {
-                  Error(_) ->
-                    dict.insert(
-                      acc,
-                      from,
-                      types.Destinations(destinations: [to]),
-                    )
-                  Ok(dests) ->
-                    dict.insert(
-                      acc,
-                      from,
-                      types.Destinations(destinations: [
-                        to,
-                        ..dests.destinations
-                      ]),
-                    )
-                }
-              }
-              _ -> panic("Invalid move length")
-            }
-            acc
-          })
+        let moves_formatted: types.Moves =
+          types.Moves(
+            moves: list.map(moves_dests_seperated, fn(origin_dests) {
+              let origin = origin_dests.0
+              let dests = origin_dests.1
+              let origin_position = position.from_string(origin)
+              let dest_positions =
+                list.map(dests, fn(dest) { position.from_string(dest) })
+              #(
+                types.Origin(origin: origin_position),
+                types.Destinations(destinations: dest_positions),
+              )
+            }),
+          )
 
-        let formatted_moves = dict.to_list(formatted_moves)
         interface(SetFen(fen))
         interface(NextTurn)
-        interface(SetMoves(Some(types.Moves(moves: formatted_moves))))
+        interface(SetMoves(Some(moves_formatted)))
         interface(SetMoveablePlayer(Some(White)))
         Nil
       }

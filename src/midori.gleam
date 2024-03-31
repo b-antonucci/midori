@@ -15,7 +15,7 @@ import move.{type Move, Castle, EnPassant, Normal}
 import piece.{Bishop, Knight, Queen, Rook}
 import position.{to_string}
 import midori/ping_server.{type PingServerMessage}
-import midori/game_manager.{type GameManagerMessage}
+import midori/game_manager.{type ClientFormatMoveList, type GameManagerMessage}
 import gleam/dynamic.{field, list, string}
 import gleam/json.{array, object, string as json_string}
 
@@ -32,7 +32,7 @@ type ApplyMoveMessage {
 }
 
 pub type UpdateGameMessage {
-  UpdateGameMessage(moves: List(String), fen: String)
+  UpdateGameMessage(moves: ClientFormatMoveList, fen: String)
 }
 
 type LegalMoves =
@@ -70,8 +70,11 @@ pub fn legal_moves_to_legal_uci_moves(legal_moves: LegalMoves) -> List(String) {
 pub fn update_game_message_to_json(
   update_game_message: UpdateGameMessage,
 ) -> String {
+  let moves = update_game_message.moves.moves
+  let moves_with_json_dests =
+    list.map(moves, fn(move) { #(move.0, array(move.1, of: json_string)) })
   object([
-    #("moves", array(update_game_message.moves, of: json_string)),
+    #("moves", object(moves_with_json_dests)),
     #("fen", json_string(update_game_message.fen)),
   ])
   |> json.to_string
@@ -160,11 +163,9 @@ fn handle_ws_message(state: State, conn, message) {
               game_manager.ApplyMove(_, state.id, convert_move(move)),
               10,
             )
-          let legal_uci_moves =
-            legal_moves_to_legal_uci_moves(game_manager_response.legal_moves)
           let update_game_message =
             UpdateGameMessage(
-              moves: legal_uci_moves,
+              moves: game_manager_response.legal_moves,
               fen: game_manager_response.fen,
             )
           let json = update_game_message_to_json(update_game_message)
