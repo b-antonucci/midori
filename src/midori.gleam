@@ -161,7 +161,7 @@ fn handle_ws_message(state: State, conn, message) {
             process.call(
               state.game_manager_subject,
               game_manager.ApplyMove(_, state.id, convert_move(move)),
-              10,
+              100,
             )
           let update_game_message =
             UpdateGameMessage(
