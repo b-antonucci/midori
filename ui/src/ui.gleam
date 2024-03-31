@@ -4,7 +4,6 @@ import file.{A, B, C, D, E, F, G, H}
 import types.{type MoveData, White}
 import config.{type Config, Config, Moveable}
 import gleam/option.{None, Some}
-import gleam/int
 import gleam/string
 import gleam/list
 import lustre.{application}
@@ -128,12 +127,10 @@ pub fn main() {
 
   let after = fn(move_data) {
     let move_data: MoveData = move_data
-    let from = position.to_int(move_data.from)
-    let to = position.to_int(move_data.to)
-    let from_as_string = int.to_string(from)
-    let to_as_string = int.to_string(to)
-    let move = from_as_string <> "-" <> to_as_string
-
+    let from = position.to_string(move_data.from)
+    let to = position.to_string(move_data.to)
+    let move = from <> "-" <> to
+    alert_js_string(move)
     ws_send_move_js(socket, ApplyMoveMessage(move))
     Nil
   }
