@@ -90,13 +90,14 @@ pub fn main() {
             let origin = origin_dests.0
             let dests = origin_dests.1
             let dests_seperated = string.split(dests, ",")
-            let dests_seperated_cleaned =
+            let dests_seperated_cleaned_promo_removed =
               list.map(dests_seperated, fn(dest) {
                 string.replace(dest, "\"", "")
                 |> string.replace("}", "")
                 |> string.replace("]", "")
+                |> string.slice(0, 2)
               })
-            #(origin, dests_seperated_cleaned)
+            #(origin, dests_seperated_cleaned_promo_removed)
           })
 
         let moves_formatted: types.Moves =

@@ -8,12 +8,9 @@ import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/bytes_builder
 import gleam/otp/actor
-import gleam/option.{None, Some}
+import gleam/option.{Some}
 import gleam/io
 import gleam/list
-import move.{type Move, Castle, EnPassant, Normal}
-import piece.{Bishop, Knight, Queen, Rook}
-import position.{to_string}
 import midori/ping_server.{type PingServerMessage}
 import midori/game_manager.{type ClientFormatMoveList, type GameManagerMessage}
 import gleam/dynamic.{field, list, string}
@@ -33,38 +30,6 @@ type ApplyMoveMessage {
 
 pub type UpdateGameMessage {
   UpdateGameMessage(moves: ClientFormatMoveList, fen: String)
-}
-
-type LegalMoves =
-  List(Move)
-
-pub fn legal_moves_to_legal_uci_moves(legal_moves: LegalMoves) -> List(String) {
-  legal_moves
-  |> list.map(fn(move) {
-    case move {
-      Normal(from, to, _captured, promotion) -> {
-        let promotion_string = case promotion {
-          None -> ""
-          Some(promotion) ->
-            case promotion.kind {
-              Queen -> "q"
-              Rook -> "r"
-              Bishop -> "b"
-              Knight -> "n"
-              _ -> panic("Invalid promotion")
-            }
-        }
-
-        to_string(from) <> to_string(to) <> promotion_string
-      }
-      Castle(from, to) -> {
-        to_string(from) <> to_string(to)
-      }
-      EnPassant(from, to) -> {
-        to_string(from) <> to_string(to)
-      }
-    }
-  })
 }
 
 pub fn update_game_message_to_json(

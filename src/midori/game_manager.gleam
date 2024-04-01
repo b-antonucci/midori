@@ -2,8 +2,11 @@ import gleam/otp/actor
 import gleam/dict.{type Dict}
 import gleam/list
 import gleam/int
+import gleam/option.{Some}
 import gleam/erlang/process.{type Subject}
 import game_server.{type Message, new_game_from_fen}
+import move.{Normal}
+import piece.{Bishop, Knight, Queen, Rook}
 import position
 import ids/uuid
 import midori/uci_move.{type UciMove}
@@ -46,14 +49,27 @@ fn handle_message(
         ) {
           let origin = move.from
           let origin_string = position.to_string(origin)
+          let promo = case move {
+            Normal(_, _, _, Some(promo)) ->
+              case promo.kind {
+                Queen -> "q"
+                Rook -> "r"
+                Knight -> "n"
+                Bishop -> "b"
+                _ -> ""
+              }
+            _ -> ""
+          }
           case list.find(acc.moves, fn(move) { move.0 == origin_string }) {
             Error(_) -> {
-              let new_move = #(origin_string, [position.to_string(move.to)])
+              let new_move = #(origin_string, [
+                position.to_string(move.to) <> promo,
+              ])
               ClientFormatMoveList(moves: [new_move, ..acc.moves])
             }
             Ok(#(_, destinations)) -> {
               let new_destinations =
-                list.append(destinations, [position.to_string(move.to)])
+                list.append(destinations, [position.to_string(move.to) <> promo])
               let new_move = #(origin_string, new_destinations)
               let new_moves =
                 list.filter(acc.moves, fn(move) { move.0 != origin_string })
