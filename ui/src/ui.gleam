@@ -1,10 +1,11 @@
-import position.{Position}
+import position.{type Position, Position}
 import rank.{Four, One, Three, Two}
 import file.{A, B, C, D, E, F, G, H}
 import types.{type MoveData, White}
 import config.{type Config, Config, Moveable}
 import gleam/option.{None, Some}
 import gleam/string
+import gleam/set
 import gleam/list
 import lustre.{application}
 import gchessboard.{
@@ -74,6 +75,7 @@ pub fn main() {
         let fen = get_data_field_js(message, "fen")
         let moves = get_data_field_object_js(message, "moves")
 
+        // TODO: Move all the aggregating below into a function
         let moves_seperated_on_origin = string.split(moves, "],")
         let moves_seperate_origin_from_destination =
           list.map(moves_seperated_on_origin, fn(origin_dests_raw_string) {
@@ -85,40 +87,75 @@ pub fn main() {
             let dests = string.replace(dests_raw, "[", "")
             #(origin, dests)
           })
-        let moves_dests_seperated =
-          list.map(moves_seperate_origin_from_destination, fn(origin_dests) {
+
+        let #(promotions, moves_dests_seperated) =
+          list.map_fold(moves_seperate_origin_from_destination, [], fn(
+            acc,
+            origin_dests,
+          ) {
             let origin = origin_dests.0
             let dests = origin_dests.1
             let dests_seperated = string.split(dests, ",")
-            let dests_seperated_cleaned_promo_removed =
+            let dests_seperated_cleaned =
               list.map(dests_seperated, fn(dest) {
                 string.replace(dest, "\"", "")
                 |> string.replace("}", "")
                 |> string.replace("]", "")
-                |> string.slice(0, 2)
               })
-            #(origin, dests_seperated_cleaned_promo_removed)
+
+            // TODO: Are we doing extra work here by relying on the
+            // properties of Set to remove duplicates?
+            let promotions: set.Set(#(types.Origin, types.Destination)) =
+              list.fold(dests_seperated_cleaned, set.new(), fn(acc, dest) {
+                let position_dest =
+                  position.from_string(string.slice(dest, 0, 2))
+
+                case string.slice(dest, 2, 1) {
+                  "q" | "r" | "n" | "b" -> {
+                    let origin = position.from_string(origin)
+                    set.insert(acc, #(origin, position_dest))
+                  }
+                  _ -> acc
+                }
+              })
+            let promotions = set.to_list(promotions)
+
+            let dests_seperated_cleaned_promo_removed =
+              list.map(dests_seperated_cleaned, fn(dest) {
+                string.slice(dest, 0, 2)
+              })
+            #(list.append(acc, promotions), #(
+              origin,
+              dests_seperated_cleaned_promo_removed,
+            ))
           })
 
         let moves_formatted: types.Moves =
-          types.Moves(
-            moves: list.map(moves_dests_seperated, fn(origin_dests) {
-              let origin = origin_dests.0
-              let dests = origin_dests.1
-              let origin_position = position.from_string(origin)
-              let dest_positions =
-                list.map(dests, fn(dest) { position.from_string(dest) })
-              #(
-                types.Origin(origin: origin_position),
-                types.Destinations(destinations: dest_positions),
-              )
-            }),
+          list.map(moves_dests_seperated, fn(origin_dests) {
+            let origin = origin_dests.0
+            let dests = origin_dests.1
+            let origin_position = position.from_string(origin)
+            let dest_positions =
+              list.map(dests, fn(dest) { position.from_string(dest) })
+            #(origin_position, dest_positions)
+          })
+
+        let config =
+          Config(
+            moveable: Some(Moveable(
+              player: None,
+              promotions: Some(promotions),
+              fen: None,
+              after: None,
+              moves: None,
+            )),
           )
 
         interface(SetFen(fen))
         interface(NextTurn)
         interface(SetMoves(Some(moves_formatted)))
         interface(SetMoveablePlayer(Some(White)))
+        interface(Set(config))
         Nil
       }
     }
@@ -130,7 +167,15 @@ pub fn main() {
     let move_data: MoveData = move_data
     let from = position.to_string(move_data.from)
     let to = position.to_string(move_data.to)
-    let move = from <> "-" <> to
+    let promo = case move_data.promotion {
+      True -> {
+        "q"
+      }
+      False -> {
+        ""
+      }
+    }
+    let move = from <> "-" <> to <> promo
     ws_send_move_js(socket, ApplyMoveMessage(move))
     Nil
   }
@@ -139,82 +184,51 @@ pub fn main() {
     Config(
       moveable: Some(Moveable(
         player: Some(White),
+        promotions: None,
         fen: None,
         after: Some(after),
-        moves: Some(
-          types.Moves(moves: [
-            #(
-              types.Origin(origin: Position(file: B, rank: One)),
-              types.Destinations(destinations: [
-                Position(file: A, rank: Three),
-                Position(file: C, rank: Three),
-              ]),
-            ),
-            #(
-              types.Origin(origin: Position(file: G, rank: One)),
-              types.Destinations(destinations: [
-                Position(file: F, rank: Three),
-                Position(file: H, rank: Three),
-              ]),
-            ),
-            #(
-              types.Origin(origin: Position(file: A, rank: Two)),
-              types.Destinations(destinations: [
-                Position(file: A, rank: Three),
-                Position(file: A, rank: Four),
-              ]),
-            ),
-            #(
-              types.Origin(origin: Position(file: B, rank: Two)),
-              types.Destinations(destinations: [
-                Position(file: B, rank: Three),
-                Position(file: B, rank: Four),
-              ]),
-            ),
-            #(
-              types.Origin(origin: Position(file: C, rank: Two)),
-              types.Destinations(destinations: [
-                Position(file: C, rank: Three),
-                Position(file: C, rank: Four),
-              ]),
-            ),
-            #(
-              types.Origin(origin: Position(file: D, rank: Two)),
-              types.Destinations(destinations: [
-                Position(file: D, rank: Three),
-                Position(file: D, rank: Four),
-              ]),
-            ),
-            #(
-              types.Origin(origin: Position(file: E, rank: Two)),
-              types.Destinations(destinations: [
-                Position(file: E, rank: Three),
-                Position(file: E, rank: Four),
-              ]),
-            ),
-            #(
-              types.Origin(origin: Position(file: F, rank: Two)),
-              types.Destinations(destinations: [
-                Position(file: F, rank: Three),
-                Position(file: F, rank: Four),
-              ]),
-            ),
-            #(
-              types.Origin(origin: Position(file: G, rank: Two)),
-              types.Destinations(destinations: [
-                Position(file: G, rank: Three),
-                Position(file: G, rank: Four),
-              ]),
-            ),
-            #(
-              types.Origin(origin: Position(file: H, rank: Two)),
-              types.Destinations(destinations: [
-                Position(file: H, rank: Three),
-                Position(file: H, rank: Four),
-              ]),
-            ),
+        moves: Some([
+          #(Position(file: B, rank: One), [
+            Position(file: A, rank: Three),
+            Position(file: C, rank: Three),
           ]),
-        ),
+          #(Position(file: G, rank: One), [
+            Position(file: F, rank: Three),
+            Position(file: H, rank: Three),
+          ]),
+          #(Position(file: A, rank: Two), [
+            Position(file: A, rank: Three),
+            Position(file: A, rank: Four),
+          ]),
+          #(Position(file: B, rank: Two), [
+            Position(file: B, rank: Three),
+            Position(file: B, rank: Four),
+          ]),
+          #(Position(file: C, rank: Two), [
+            Position(file: C, rank: Three),
+            Position(file: C, rank: Four),
+          ]),
+          #(Position(file: D, rank: Two), [
+            Position(file: D, rank: Three),
+            Position(file: D, rank: Four),
+          ]),
+          #(Position(file: E, rank: Two), [
+            Position(file: E, rank: Three),
+            Position(file: E, rank: Four),
+          ]),
+          #(Position(file: F, rank: Two), [
+            Position(file: F, rank: Three),
+            Position(file: F, rank: Four),
+          ]),
+          #(Position(file: G, rank: Two), [
+            Position(file: G, rank: Three),
+            Position(file: G, rank: Four),
+          ]),
+          #(Position(file: H, rank: Two), [
+            Position(file: H, rank: Three),
+            Position(file: H, rank: Four),
+          ]),
+        ]),
       )),
     )
 
