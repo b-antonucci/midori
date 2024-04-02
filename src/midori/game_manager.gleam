@@ -41,6 +41,10 @@ fn handle_message(
       let random_index = int.random(length)
       let assert Ok(random_move) = list.at(legal_moves, random_index)
       game_server.apply_move(server, random_move)
+
+      // TODO: There should be a function called all_legal_moves_aggregated or something
+      // that gives us the moves in the correct format instead of all this work we do here.
+      // We are duplicating work by processing the moves twice.
       let unformatted_moves = game_server.all_legal_moves(server)
       let formatted_moves =
         list.fold(unformatted_moves, ClientFormatMoveList(moves: []), fn(
