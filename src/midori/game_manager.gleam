@@ -38,57 +38,72 @@ fn handle_message(
       game_server.apply_move_uci_string(server, move.move)
       let legal_moves = game_server.all_legal_moves(server)
       let length = list.length(legal_moves)
-      let random_index = int.random(length)
-      let assert Ok(random_move) = list.at(legal_moves, random_index)
-      game_server.apply_move(server, random_move)
+      case length {
+        0 -> {
+          let response =
+            ApplyMoveResult(
+              legal_moves: ClientFormatMoveList(moves: []),
+              fen: game_server.get_fen(server),
+            )
+          process.send(client, response)
+          actor.continue(game_map)
+        }
+        _ -> {
+          let random_index = int.random(length)
+          let assert Ok(random_move) = list.at(legal_moves, random_index)
+          game_server.apply_move(server, random_move)
 
-      // TODO: There should be a function called all_legal_moves_aggregated or something
-      // that gives us the moves in the correct format instead of all this work we do here.
-      // We are duplicating work by processing the moves twice.
-      let unformatted_moves = game_server.all_legal_moves(server)
-      let formatted_moves =
-        list.fold(unformatted_moves, ClientFormatMoveList(moves: []), fn(
-          acc,
-          move,
-        ) {
-          let origin = move.from
-          let origin_string = position.to_string(origin)
-          let promo = case move {
-            Normal(_, _, _, Some(promo)) ->
-              case promo.kind {
-                Queen -> "q"
-                Rook -> "r"
-                Knight -> "n"
-                Bishop -> "b"
+          // TODO: There should be a function called all_legal_moves_aggregated or something
+          // that gives us the moves in the correct format instead of all this work we do here.
+          // We are duplicating work by processing the moves twice.
+          let unformatted_moves = game_server.all_legal_moves(server)
+          let formatted_moves =
+            list.fold(unformatted_moves, ClientFormatMoveList(moves: []), fn(
+              acc,
+              move,
+            ) {
+              let origin = move.from
+              let origin_string = position.to_string(origin)
+              let promo = case move {
+                Normal(_, _, _, Some(promo)) ->
+                  case promo.kind {
+                    Queen -> "q"
+                    Rook -> "r"
+                    Knight -> "n"
+                    Bishop -> "b"
+                    _ -> ""
+                  }
                 _ -> ""
               }
-            _ -> ""
-          }
-          case list.find(acc.moves, fn(move) { move.0 == origin_string }) {
-            Error(_) -> {
-              let new_move = #(origin_string, [
-                position.to_string(move.to) <> promo,
-              ])
-              ClientFormatMoveList(moves: [new_move, ..acc.moves])
-            }
-            Ok(#(_, destinations)) -> {
-              let new_destinations =
-                list.append(destinations, [position.to_string(move.to) <> promo])
-              let new_move = #(origin_string, new_destinations)
-              let new_moves =
-                list.filter(acc.moves, fn(move) { move.0 != origin_string })
-              ClientFormatMoveList(moves: [new_move, ..new_moves])
-            }
-          }
-        })
+              case list.find(acc.moves, fn(move) { move.0 == origin_string }) {
+                Error(_) -> {
+                  let new_move = #(origin_string, [
+                    position.to_string(move.to) <> promo,
+                  ])
+                  ClientFormatMoveList(moves: [new_move, ..acc.moves])
+                }
+                Ok(#(_, destinations)) -> {
+                  let new_destinations =
+                    list.append(destinations, [
+                      position.to_string(move.to) <> promo,
+                    ])
+                  let new_move = #(origin_string, new_destinations)
+                  let new_moves =
+                    list.filter(acc.moves, fn(move) { move.0 != origin_string })
+                  ClientFormatMoveList(moves: [new_move, ..new_moves])
+                }
+              }
+            })
 
-      let response =
-        ApplyMoveResult(
-          legal_moves: formatted_moves,
-          fen: game_server.get_fen(server),
-        )
-      process.send(client, response)
-      actor.continue(game_map)
+          let response =
+            ApplyMoveResult(
+              legal_moves: formatted_moves,
+              fen: game_server.get_fen(server),
+            )
+          process.send(client, response)
+          actor.continue(game_map)
+        }
+      }
     }
     NewGame(client) -> {
       let server: Subject(Message) = game_server.new_server()
