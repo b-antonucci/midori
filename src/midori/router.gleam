@@ -1,6 +1,6 @@
-import wisp.{type Request, type Response}
 import gleam/string_builder
 import midori/web.{type Context}
+import wisp.{type Request, type Response}
 
 const html = "
 <!DOCTYPE html>
@@ -21,7 +21,7 @@ const html = "
 </head>
 
 <body>
-    <div data-lustre-app></div>
+    <div gchessboard-lustre-app></div>
 </body>
 
 </html>

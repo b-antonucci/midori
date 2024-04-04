@@ -4,12 +4,14 @@ import gchessboard.{
   type Msg, NextTurn, Set, SetFen, SetMoveablePlayer, SetMoves, init, update,
   view,
 }
+import gleam/dict.{type Dict}
+import gleam/dynamic.{type Dynamic}
 import gleam/javascript/array.{type Array}
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/set
 import gleam/string
-import lustre.{application}
+import lustre.{type Action, type ClientSpa, application, component, dispatch}
 import lustre/element
 import position.{type Position, Position}
 import rank.{Four, One, Three, Two}
@@ -64,40 +66,13 @@ pub fn get_data_field_array_js(object: String, field: String) -> Array(String)
 @external(javascript, "./ffi.js", "get_data_field_object_js")
 pub fn get_data_field_object_js(object: String, field: String) -> String
 
-pub type UiMsg {
-  Promotion(origin: Position, dest: Position)
-  BoardMsg(board_msg: Msg)
-}
-
-pub fn ui_init(nil) {
-  init(nil)
-}
-
-pub fn ui_update(state, ui_msg) {
-  case ui_msg {
-    Promotion(_origin, _dest) -> {
-      panic("Promotion not implemented")
-    }
-    BoardMsg(msg) -> {
-      update(state, msg)
-    }
-  }
-}
-
-pub fn ui_view(state) {
-  element.map(view(state), fn(msg) {
-    case msg {
-      msg -> {
-        BoardMsg(msg)
-      }
-    }
-  })
-}
-
 pub fn main() {
   let socket = ws_init_js()
-  let app = application(ui_init, ui_update, ui_view)
-  let assert Ok(interface) = lustre.start(app, "[data-lustre-app]", Nil)
+  // let on_attribute_change: Dict(String, fn(Dynamic) -> Result(Msg, List(_))) =
+  //   dict.from_list([])
+  // let board = component(init, update, view, on_attribute_change)
+  let app = application(init, update, view)
+  let assert Ok(interface) = lustre.start(app, "[gchessboard-lustre-app]", Nil)
   let on_message = fn(message) {
     case get_data_as_string_js(message) {
       "pong" -> {
@@ -190,11 +165,11 @@ pub fn main() {
                 )),
               )
 
-            interface(BoardMsg(SetFen(fen)))
-            interface(BoardMsg(NextTurn))
-            interface(BoardMsg(SetMoves(Some(moves_formatted))))
-            interface(BoardMsg(SetMoveablePlayer(Some(White))))
-            interface(BoardMsg(Set(config)))
+            interface(dispatch(SetFen(fen)))
+            interface(dispatch(NextTurn))
+            interface(dispatch(SetMoves(Some(moves_formatted))))
+            interface(dispatch(SetMoveablePlayer(Some(White))))
+            interface(dispatch(Set(config)))
             Nil
           }
         }
@@ -273,7 +248,7 @@ pub fn main() {
       )),
     )
 
-  interface(BoardMsg(Set(config)))
+  interface(dispatch(Set(config)))
 
   Nil
 }

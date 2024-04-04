@@ -5,7 +5,7 @@ target = "javascript"
 [dependencies]
 gchessboard = { path = "gchessboard" }
 gleam_stdlib = "~> 0.32"
-lustre = "~> 3.0"
+lustre = "~> 4.1"
 gleam_javascript = "~> 0.8"
 
 [dev-dependencies]
