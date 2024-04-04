@@ -1,18 +1,16 @@
 import config.{type Config, Config, Moveable}
 import file.{A, B, C, D, E, F, G, H}
 import gchessboard.{
-  type Msg, NextTurn, Set, SetFen, SetMoveablePlayer, SetMoves, init, update,
-  view,
+  NextTurn, Set, SetFen, SetMoveablePlayer, SetMoves, init, update, view,
 }
-import gleam/dict.{type Dict}
-import gleam/dynamic.{type Dynamic}
 import gleam/javascript/array.{type Array}
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/set
 import gleam/string
-import lustre.{type Action, type ClientSpa, application, component, dispatch}
-import lustre/element
+import lustre.{application, dispatch}
+import lustre/effect
+import lustre/element/html.{div, text}
 import position.{type Position, Position}
 import rank.{Four, One, Three, Two}
 import types.{type MoveData, White}
@@ -25,6 +23,30 @@ pub type ApplyMoveMessage {
 
 pub type UpdateGameResponse {
   UpdateGameResponse(moves: List(String), fen: String)
+}
+
+pub type UiState {
+  UiState(promotion: Bool)
+}
+
+pub type UiMsg {
+  ShowPromotion
+}
+
+pub fn ui_init(_) {
+  #(UiState(promotion: False), effect.none())
+}
+
+pub fn ui_update(_state, msg) {
+  case msg {
+    ShowPromotion -> {
+      #(UiState(promotion: True), effect.none())
+    }
+  }
+}
+
+pub fn ui_view(_state) {
+  div([], [text("HELLO FROM UI")])
 }
 
 @external(javascript, "./ffi.js", "alert_js")
@@ -68,11 +90,10 @@ pub fn get_data_field_object_js(object: String, field: String) -> String
 
 pub fn main() {
   let socket = ws_init_js()
-  // let on_attribute_change: Dict(String, fn(Dynamic) -> Result(Msg, List(_))) =
-  //   dict.from_list([])
-  // let board = component(init, update, view, on_attribute_change)
   let app = application(init, update, view)
+  let ui_app = application(ui_init, ui_update, ui_view)
   let assert Ok(interface) = lustre.start(app, "[gchessboard-lustre-app]", Nil)
+  let assert Ok(_ui_interface) = lustre.start(ui_app, "[ui-lustre-app]", Nil)
   let on_message = fn(message) {
     case get_data_as_string_js(message) {
       "pong" -> {

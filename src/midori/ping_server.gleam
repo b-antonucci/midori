@@ -1,5 +1,5 @@
-import gleam/otp/actor
 import gleam/erlang/process.{type Subject}
+import gleam/otp/actor
 import mist.{type WebsocketConnection}
 
 pub type PingServerMessage {
@@ -13,7 +13,8 @@ fn handle_message(
   case message {
     Ping(conn) -> {
       process.sleep(10_000)
-      let assert Ok(_) = mist.send_text_frame(conn, "pong")
+      let assert Ok(nil) = mist.send_text_frame(conn, "pong")
+      nil
     }
   }
   actor.continue(state)

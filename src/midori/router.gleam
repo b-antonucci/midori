@@ -21,6 +21,7 @@ const html = "
 </head>
 
 <body>
+    <div ui-lustre-app></div>
     <div gchessboard-lustre-app></div>
 </body>
 
