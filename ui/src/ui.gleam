@@ -1,17 +1,19 @@
-import position.{type Position, Position}
-import rank.{Four, One, Three, Two}
-import file.{A, B, C, D, E, F, G, H}
-import types.{type MoveData, White}
 import config.{type Config, Config, Moveable}
-import gleam/option.{None, Some}
-import gleam/string
-import gleam/set
-import gleam/list
-import lustre.{application}
+import file.{A, B, C, D, E, F, G, H}
 import gchessboard.{
-  NextTurn, Set, SetFen, SetMoveablePlayer, SetMoves, init, update, view,
+  type Msg, NextTurn, Set, SetFen, SetMoveablePlayer, SetMoves, init, update,
+  view,
 }
 import gleam/javascript/array.{type Array}
+import gleam/list
+import gleam/option.{None, Some}
+import gleam/set
+import gleam/string
+import lustre.{application}
+import lustre/element
+import position.{type Position, Position}
+import rank.{Four, One, Three, Two}
+import types.{type MoveData, White}
 
 pub type Websocket
 
@@ -62,9 +64,39 @@ pub fn get_data_field_array_js(object: String, field: String) -> Array(String)
 @external(javascript, "./ffi.js", "get_data_field_object_js")
 pub fn get_data_field_object_js(object: String, field: String) -> String
 
+pub type UiMsg {
+  Promotion(origin: Position, dest: Position)
+  BoardMsg(board_msg: Msg)
+}
+
+pub fn ui_init(nil) {
+  init(nil)
+}
+
+pub fn ui_update(state, ui_msg) {
+  case ui_msg {
+    Promotion(_origin, _dest) -> {
+      panic("Promotion not implemented")
+    }
+    BoardMsg(msg) -> {
+      update(state, msg)
+    }
+  }
+}
+
+pub fn ui_view(state) {
+  element.map(view(state), fn(msg) {
+    case msg {
+      msg -> {
+        BoardMsg(msg)
+      }
+    }
+  })
+}
+
 pub fn main() {
   let socket = ws_init_js()
-  let app = application(init, update, view)
+  let app = application(ui_init, ui_update, ui_view)
   let assert Ok(interface) = lustre.start(app, "[data-lustre-app]", Nil)
   let on_message = fn(message) {
     case get_data_as_string_js(message) {
@@ -95,46 +127,47 @@ pub fn main() {
               })
 
             let #(promotions, moves_dests_seperated) =
-              list.map_fold(moves_seperate_origin_from_destination, [], fn(
-                acc,
-                origin_dests,
-              ) {
-                let origin = origin_dests.0
-                let dests = origin_dests.1
-                let dests_seperated = string.split(dests, ",")
-                let dests_seperated_cleaned =
-                  list.map(dests_seperated, fn(dest) {
-                    string.replace(dest, "\"", "")
-                    |> string.replace("}", "")
-                    |> string.replace("]", "")
-                  })
+              list.map_fold(
+                moves_seperate_origin_from_destination,
+                [],
+                fn(acc, origin_dests) {
+                  let origin = origin_dests.0
+                  let dests = origin_dests.1
+                  let dests_seperated = string.split(dests, ",")
+                  let dests_seperated_cleaned =
+                    list.map(dests_seperated, fn(dest) {
+                      string.replace(dest, "\"", "")
+                      |> string.replace("}", "")
+                      |> string.replace("]", "")
+                    })
 
-                // TODO: Are we doing extra work here by relying on the
-                // properties of Set to remove duplicates?
-                let promotions: set.Set(#(types.Origin, types.Destination)) =
-                  list.fold(dests_seperated_cleaned, set.new(), fn(acc, dest) {
-                    let position_dest =
-                      position.from_string(string.slice(dest, 0, 2))
+                  // TODO: Are we doing extra work here by relying on the
+                  // properties of Set to remove duplicates?
+                  let promotions: set.Set(#(types.Origin, types.Destination)) =
+                    list.fold(dests_seperated_cleaned, set.new(), fn(acc, dest) {
+                      let position_dest =
+                        position.from_string(string.slice(dest, 0, 2))
 
-                    case string.slice(dest, 2, 1) {
-                      "q" | "r" | "n" | "b" -> {
-                        let origin = position.from_string(origin)
-                        set.insert(acc, #(origin, position_dest))
+                      case string.slice(dest, 2, 1) {
+                        "q" | "r" | "n" | "b" -> {
+                          let origin = position.from_string(origin)
+                          set.insert(acc, #(origin, position_dest))
+                        }
+                        _ -> acc
                       }
-                      _ -> acc
-                    }
-                  })
-                let promotions = set.to_list(promotions)
+                    })
+                  let promotions = set.to_list(promotions)
 
-                let dests_seperated_cleaned_promo_removed =
-                  list.map(dests_seperated_cleaned, fn(dest) {
-                    string.slice(dest, 0, 2)
-                  })
-                #(list.append(acc, promotions), #(
-                  origin,
-                  dests_seperated_cleaned_promo_removed,
-                ))
-              })
+                  let dests_seperated_cleaned_promo_removed =
+                    list.map(dests_seperated_cleaned, fn(dest) {
+                      string.slice(dest, 0, 2)
+                    })
+                  #(list.append(acc, promotions), #(
+                    origin,
+                    dests_seperated_cleaned_promo_removed,
+                  ))
+                },
+              )
 
             let moves_formatted: types.Moves =
               list.map(moves_dests_seperated, fn(origin_dests) {
@@ -157,11 +190,11 @@ pub fn main() {
                 )),
               )
 
-            interface(SetFen(fen))
-            interface(NextTurn)
-            interface(SetMoves(Some(moves_formatted)))
-            interface(SetMoveablePlayer(Some(White)))
-            interface(Set(config))
+            interface(BoardMsg(SetFen(fen)))
+            interface(BoardMsg(NextTurn))
+            interface(BoardMsg(SetMoves(Some(moves_formatted))))
+            interface(BoardMsg(SetMoveablePlayer(Some(White))))
+            interface(BoardMsg(Set(config)))
             Nil
           }
         }
@@ -240,7 +273,7 @@ pub fn main() {
       )),
     )
 
-  interface(Set(config))
+  interface(BoardMsg(Set(config)))
 
   Nil
 }
