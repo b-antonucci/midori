@@ -5,7 +5,7 @@ import gchessboard.{
 }
 import gleam/javascript/array.{type Array}
 import gleam/list
-import gleam/option.{None, Some}
+import gleam/option.{type Option, None, Some}
 import gleam/set
 import gleam/string
 import lustre.{application, dispatch}
@@ -26,27 +26,11 @@ pub type UpdateGameResponse {
 }
 
 pub type UiState {
-  UiState(promotion: Bool)
+  UiState(promotion: Bool, on_click: Option(fn() -> Nil))
 }
 
 pub type UiMsg {
   ShowPromotion
-}
-
-pub fn ui_init(_) {
-  #(UiState(promotion: False), effect.none())
-}
-
-pub fn ui_update(_state, msg) {
-  case msg {
-    ShowPromotion -> {
-      #(UiState(promotion: True), effect.none())
-    }
-  }
-}
-
-pub fn ui_view(_state) {
-  div([], [text("HELLO FROM UI")])
 }
 
 @external(javascript, "./ffi.js", "alert_js")
@@ -93,7 +77,7 @@ pub fn main() {
   let app = application(init, update, view)
   let ui_app = application(ui_init, ui_update, ui_view)
   let assert Ok(interface) = lustre.start(app, "[gchessboard-lustre-app]", Nil)
-  let assert Ok(_ui_interface) = lustre.start(ui_app, "[ui-lustre-app]", Nil)
+  let assert Ok(ui_interface) = lustre.start(ui_app, "[ui-lustre-app]", Nil)
   let on_message = fn(message) {
     case get_data_as_string_js(message) {
       "pong" -> {
@@ -204,16 +188,17 @@ pub fn main() {
     let move_data: MoveData = move_data
     let from = position.to_string(move_data.from)
     let to = position.to_string(move_data.to)
-    let promo = case move_data.promotion {
+    case move_data.promotion {
       True -> {
-        "q"
+        ui_interface(dispatch(ShowPromotion))
+        let move = from <> "-" <> to <> "q"
+        ws_send_move_js(socket, ApplyMoveMessage(move))
       }
       False -> {
-        ""
+        let move = from <> "-" <> to
+        ws_send_move_js(socket, ApplyMoveMessage(move))
       }
     }
-    let move = from <> "-" <> to <> promo
-    ws_send_move_js(socket, ApplyMoveMessage(move))
     Nil
   }
 
@@ -272,4 +257,32 @@ pub fn main() {
   interface(dispatch(Set(config)))
 
   Nil
+}
+
+pub fn ui_init(_) {
+  #(UiState(promotion: False, on_click: None), effect.none())
+}
+
+pub fn ui_update(_state, msg) {
+  case msg {
+    ShowPromotion -> {
+      #(UiState(promotion: True, on_click: None), effect.none())
+    }
+  }
+}
+
+pub fn ui_view(state) {
+  case state {
+    UiState(promotion: True, on_click: _) -> {
+      div([], [
+        html.button([], [text("Queen")]),
+        html.button([], [text("Rook")]),
+        html.button([], [text("Knight")]),
+        html.button([], [text("Bishop")]),
+      ])
+    }
+    UiState(promotion: False, on_click: _) -> {
+      div([], [])
+    }
+  }
 }
