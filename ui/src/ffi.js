@@ -82,3 +82,7 @@ export function ws_send_move_js(socket, message) {
   message = Object.assign({ type: "move" }, message);
   socket.send(JSON.stringify(message));
 }
+
+export function console_log_js(message) {
+  console.log(message);
+}
