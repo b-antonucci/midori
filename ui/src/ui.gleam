@@ -1,13 +1,8 @@
 import config.{type Config, Config, Moveable}
 import file.{A, B, C, D, E, F, G, H}
-import gchessboard.{
-  NextTurn, Set, SetFen, SetMoveablePlayer, SetMoves, init, update, view,
-}
+import gchessboard.{Set, init, update, view}
 import gleam/javascript/array.{type Array}
-import gleam/list
 import gleam/option.{type Option, None, Some}
-import gleam/set
-import gleam/string
 import lustre.{application, dispatch}
 import lustre/effect
 import lustre/element/html.{div, text}
@@ -106,101 +101,8 @@ pub fn main() {
         Nil
       }
       _some_data -> {
-        let fen = get_data_field_js(message, "fen")
-        let moves = get_data_field_object_js(message, "moves")
-
-        case moves {
-          "{}" -> {
-            interface(dispatch(SetFen(fen)))
-            Nil
-          }
-          _ -> {
-            // TODO: Move all the aggregating below into a function
-            let moves_seperated_on_origin = string.split(moves, "],")
-            let moves_seperate_origin_from_destination =
-              list.map(moves_seperated_on_origin, fn(origin_dests_raw_string) {
-                let origin_dests_split =
-                  string.split(origin_dests_raw_string, ":")
-                let assert Ok(origin_raw) = list.first(origin_dests_split)
-                let origin = string.replace(origin_raw, "\"", "")
-                let origin = string.replace(origin, "{", "")
-                let assert Ok(dests_raw) = list.at(origin_dests_split, 1)
-                let dests = string.replace(dests_raw, "[", "")
-                #(origin, dests)
-              })
-
-            let #(promotions, moves_dests_seperated) =
-              list.map_fold(
-                moves_seperate_origin_from_destination,
-                [],
-                fn(acc, origin_dests) {
-                  let origin = origin_dests.0
-                  let dests = origin_dests.1
-                  let dests_seperated = string.split(dests, ",")
-                  let dests_seperated_cleaned =
-                    list.map(dests_seperated, fn(dest) {
-                      string.replace(dest, "\"", "")
-                      |> string.replace("}", "")
-                      |> string.replace("]", "")
-                    })
-
-                  // TODO: Are we doing extra work here by relying on the
-                  // properties of Set to remove duplicates?
-                  let promotions: set.Set(#(types.Origin, types.Destination)) =
-                    list.fold(dests_seperated_cleaned, set.new(), fn(acc, dest) {
-                      let position_dest =
-                        position.from_string(string.slice(dest, 0, 2))
-
-                      case string.slice(dest, 2, 1) {
-                        "q" | "r" | "n" | "b" -> {
-                          let origin = position.from_string(origin)
-                          set.insert(acc, #(origin, position_dest))
-                        }
-                        _ -> acc
-                      }
-                    })
-                  let promotions = set.to_list(promotions)
-
-                  let dests_seperated_cleaned_promo_removed =
-                    list.map(dests_seperated_cleaned, fn(dest) {
-                      string.slice(dest, 0, 2)
-                    })
-                  #(list.append(acc, promotions), #(
-                    origin,
-                    dests_seperated_cleaned_promo_removed,
-                  ))
-                },
-              )
-
-            let moves_formatted: types.Moves =
-              list.map(moves_dests_seperated, fn(origin_dests) {
-                let origin = origin_dests.0
-                let dests = origin_dests.1
-                let origin_position = position.from_string(origin)
-                let dest_positions =
-                  list.map(dests, fn(dest) { position.from_string(dest) })
-                #(origin_position, dest_positions)
-              })
-
-            let config =
-              Config(
-                moveable: Some(Moveable(
-                  player: None,
-                  promotions: Some(promotions),
-                  fen: None,
-                  after: None,
-                  moves: None,
-                )),
-              )
-
-            interface(dispatch(SetFen(fen)))
-            interface(dispatch(NextTurn))
-            interface(dispatch(SetMoves(Some(moves_formatted))))
-            interface(dispatch(SetMoveablePlayer(Some(White))))
-            interface(dispatch(Set(config)))
-            Nil
-          }
-        }
+        let _move = get_data_field_js(message, "move")
+        Nil
       }
     }
   }

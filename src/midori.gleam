@@ -1,15 +1,16 @@
 import gleam/bytes_builder
-import gleam/dynamic.{field, list, string}
+import gleam/dynamic.{field, string}
 import gleam/erlang/process.{type Subject}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
 import gleam/io
-import gleam/json.{array, object, string as json_string}
-import gleam/list
+import gleam/json.{object, string as json_string}
 import gleam/option.{Some}
 import gleam/otp/actor
 import midori/bot_server
-import midori/game_manager.{type ClientFormatMoveList, type GameManagerMessage}
+import midori/bot_server_message.{SetGameManagerSubject}
+import midori/game_manager
+import midori/game_manager_message.{type GameManagerMessage, ApplyMove, NewGame}
 import midori/ping_server.{type PingServerMessage}
 import midori/router
 import midori/uci_move.{convert_move}
@@ -30,18 +31,18 @@ type ApplyMoveMessage {
 }
 
 pub type UpdateGameMessage {
-  UpdateGameMessage(moves: ClientFormatMoveList, fen: String)
+  UpdateGameMessage(move: uci_move.UciMove)
 }
 
 pub fn update_game_message_to_json(
   update_game_message: UpdateGameMessage,
 ) -> String {
-  let moves = update_game_message.moves.moves
-  let moves_with_json_dests =
-    list.map(moves, fn(move) { #(move.0, array(move.1, of: json_string)) })
+  // let moves = update_game_message.moves.moves
+  // let moves_with_json_dests =
+  //   list.map(moves, fn(move) { #(move.0, array(move.1, of: json_string)) })
   object([
-    #("moves", object(moves_with_json_dests)),
-    #("fen", json_string(update_game_message.fen)),
+    // #("moves", object(moves_with_json_dests)),
+    #("move", json_string(update_game_message.move.move)),
   ])
   |> json.to_string
 }
@@ -52,10 +53,11 @@ pub fn main() {
   wisp.configure_logger()
   let secret_key_base = wisp.random_string(64)
 
-  let assert Ok(bot_server) = bot_server.start_bot_server()
+  let assert Ok(bot_server) = bot_server.start_bot_server(option.None)
   let assert Ok(ping_server_subject) = ping_server.start_ping_server()
   let assert Ok(game_manager_subject) =
     game_manager.start_game_manager(bot_server)
+  process.send(bot_server, SetGameManagerSubject(game_manager_subject))
 
   // A context is constructed holding the static directory path.
   let ctx = Context(static_directory: static_directory())
@@ -75,8 +77,7 @@ pub fn main() {
           mist.websocket(
             request: req,
             on_init: fn(_websocket) {
-              let id =
-                process.call(game_manager_subject, game_manager.NewGame, 10)
+              let id = process.call(game_manager_subject, NewGame, 10)
               let state = State(id, ping_server_subject, game_manager_subject)
               #(state, Some(selector))
             },
@@ -128,14 +129,11 @@ fn handle_ws_message(state: State, conn, message) {
           let game_manager_response =
             process.call(
               state.game_manager_subject,
-              game_manager.ApplyMove(_, state.id, convert_move(move)),
+              ApplyMove(_, state.id, convert_move(move)),
               1000,
             )
           let update_game_message =
-            UpdateGameMessage(
-              moves: game_manager_response.legal_moves,
-              fen: game_manager_response.fen,
-            )
+            UpdateGameMessage(move: game_manager_response.move)
           let json = update_game_message_to_json(update_game_message)
 
           let assert Ok(_) = mist.send_text_frame(conn, json)
@@ -143,7 +141,6 @@ fn handle_ws_message(state: State, conn, message) {
           actor.continue(state)
         }
         Error(_) -> {
-          io.println("Failed to decode message")
           actor.continue(state)
         }
       }
