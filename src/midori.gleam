@@ -1,20 +1,21 @@
+import gleam/bytes_builder
+import gleam/dynamic.{field, list, string}
 import gleam/erlang/process.{type Subject}
-import mist.{type Connection, type ResponseData}
-import wisp
+import gleam/http/request.{type Request}
+import gleam/http/response.{type Response}
+import gleam/io
+import gleam/json.{array, object, string as json_string}
+import gleam/list
+import gleam/option.{Some}
+import gleam/otp/actor
+import midori/bot_server
+import midori/game_manager.{type ClientFormatMoveList, type GameManagerMessage}
+import midori/ping_server.{type PingServerMessage}
 import midori/router
 import midori/uci_move.{convert_move}
 import midori/web.{Context}
-import gleam/http/request.{type Request}
-import gleam/http/response.{type Response}
-import gleam/bytes_builder
-import gleam/otp/actor
-import gleam/option.{Some}
-import gleam/io
-import gleam/list
-import midori/ping_server.{type PingServerMessage}
-import midori/game_manager.{type ClientFormatMoveList, type GameManagerMessage}
-import gleam/dynamic.{field, list, string}
-import gleam/json.{array, object, string as json_string}
+import mist.{type Connection, type ResponseData}
+import wisp
 
 type State {
   State(
@@ -51,8 +52,10 @@ pub fn main() {
   wisp.configure_logger()
   let secret_key_base = wisp.random_string(64)
 
+  let assert Ok(bot_server) = bot_server.start_bot_server()
   let assert Ok(ping_server_subject) = ping_server.start_ping_server()
-  let assert Ok(game_manager_subject) = game_manager.start_game_manager()
+  let assert Ok(game_manager_subject) =
+    game_manager.start_game_manager(bot_server)
 
   // A context is constructed holding the static directory path.
   let ctx = Context(static_directory: static_directory())
@@ -126,7 +129,7 @@ fn handle_ws_message(state: State, conn, message) {
             process.call(
               state.game_manager_subject,
               game_manager.ApplyMove(_, state.id, convert_move(move)),
-              100,
+              1000,
             )
           let update_game_message =
             UpdateGameMessage(

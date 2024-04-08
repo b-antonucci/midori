@@ -111,6 +111,7 @@ pub fn main() {
 
         case moves {
           "{}" -> {
+            interface(dispatch(SetFen(fen)))
             Nil
           }
           _ -> {
