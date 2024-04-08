@@ -3,6 +3,7 @@ import gleam/dict.{type Dict}
 import gleam/erlang/process.{type Subject}
 import gleam/io
 import gleam/list
+import gleam/option.{Some}
 import gleam/otp/actor
 import ids/uuid
 import midori/bot_server_message.{type BotServerMessage, RequestBotMove}
@@ -10,6 +11,9 @@ import midori/game_manager_message.{
   type GameManagerMessage, ApplyAiMove, ApplyMove, ConfirmMove, NewGame,
   Shutdown,
 }
+import move.{Normal}
+import piece.{Bishop, Knight, Queen, Rook}
+import position
 
 pub type GameManagerState {
   GameManagerState(
@@ -49,61 +53,59 @@ fn handle_message(
             RequestBotMove(gameid: id, fen: fen),
           )
 
-          // TODO: There should be a function called all_legal_moves_aggregated or something
-          // that gives us the moves in the correct format instead of all this work we do here.
-          // We are duplicating work by processing the moves twice.
-          // let unformatted_moves = game_server.all_legal_moves(server)
-          // let formatted_moves =
-          //   list.fold(
-          //     unformatted_moves,
-          //     ClientFormatMoveList(moves: []),
-          //     fn(acc, move) {
-          //       let origin = move.from
-          //       let origin_string = position.to_string(origin)
-          //       let promo = case move {
-          //         Normal(_, _, _, Some(promo)) ->
-          //           case promo.kind {
-          //             Queen -> "q"
-          //             Rook -> "r"
-          //             Knight -> "n"
-          //             Bishop -> "b"
-          //             _ -> ""
-          //           }
-          //         _ -> ""
-          //       }
-          //       case
-          //         list.find(acc.moves, fn(move) { move.0 == origin_string })
-          //       {
-          //         Error(_) -> {
-          //           let new_move = #(origin_string, [
-          //             position.to_string(move.to) <> promo,
-          //           ])
-          //           ClientFormatMoveList(moves: [new_move, ..acc.moves])
-          //         }
-          //         Ok(#(_, destinations)) -> {
-          //           let new_destinations =
-          //             list.append(destinations, [
-          //               position.to_string(move.to) <> promo,
-          //             ])
-          //           let new_move = #(origin_string, new_destinations)
-          //           let new_moves =
-          //             list.filter(acc.moves, fn(move) {
-          //               move.0 != origin_string
-          //             })
-          //           ClientFormatMoveList(moves: [new_move, ..new_moves])
-          //         }
-          //       }
-          //     },
-          //   )
-
           let response = ConfirmMove(move)
           process.send(client, response)
           actor.continue(state)
         }
       }
     }
-    ApplyAiMove(_id, move) -> {
+    ApplyAiMove(id, move) -> {
+      let assert Ok(server) = dict.get(state.game_map, id)
+      game_server.apply_move_uci_string(server, move)
+      // TODO: There should be a function called all_legal_moves_aggregated or something
+      // that gives us the moves in the correct format instead of all this work we do here.
+      // We are duplicating work by processing the moves twice.
+      let unformatted_moves = game_server.all_legal_moves(server)
+      let _formatted_moves =
+        list.fold(
+          unformatted_moves,
+          ClientFormatMoveList(moves: []),
+          fn(acc, move) {
+            let origin = move.from
+            let origin_string = position.to_string(origin)
+            let promo = case move {
+              Normal(_, _, _, Some(promo)) ->
+                case promo.kind {
+                  Queen -> "q"
+                  Rook -> "r"
+                  Knight -> "n"
+                  Bishop -> "b"
+                  _ -> ""
+                }
+              _ -> ""
+            }
+            case list.find(acc.moves, fn(move) { move.0 == origin_string }) {
+              Error(_) -> {
+                let new_move = #(origin_string, [
+                  position.to_string(move.to) <> promo,
+                ])
+                ClientFormatMoveList(moves: [new_move, ..acc.moves])
+              }
+              Ok(#(_, destinations)) -> {
+                let new_destinations =
+                  list.append(destinations, [
+                    position.to_string(move.to) <> promo,
+                  ])
+                let new_move = #(origin_string, new_destinations)
+                let new_moves =
+                  list.filter(acc.moves, fn(move) { move.0 != origin_string })
+                ClientFormatMoveList(moves: [new_move, ..new_moves])
+              }
+            }
+          },
+        )
       io.println(move)
+
       actor.continue(state)
     }
     NewGame(client) -> {
