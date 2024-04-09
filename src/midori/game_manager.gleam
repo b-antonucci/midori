@@ -1,5 +1,6 @@
 import game_server.{type Message, new_game_from_fen}
 import gleam/dict.{type Dict}
+import gleam/dynamic.{list}
 import gleam/erlang/process.{type Subject}
 import gleam/io
 import gleam/list
@@ -7,9 +8,13 @@ import gleam/option.{Some}
 import gleam/otp/actor
 import ids/uuid
 import midori/bot_server_message.{type BotServerMessage, RequestBotMove}
+import midori/client_ws_message.{
+  type ClientFormatMoveList, BotMove, ClientFormatMoveList,
+  update_game_message_to_json,
+}
 import midori/game_manager_message.{
   type GameManagerMessage, ApplyAiMove, ApplyMove, ConfirmMove, NewGame,
-  Shutdown,
+  RemoveGame, Shutdown,
 }
 import move.{Normal}
 import piece.{Bishop, Knight, Queen, Rook}
@@ -20,12 +25,6 @@ pub type GameManagerState {
     game_map: Dict(String, Subject(Message)),
     bot_server_pid: Subject(BotServerMessage),
   )
-}
-
-// The first element of the tuple is the origin square
-// and the second element is a list of possible destination squares
-pub type ClientFormatMoveList {
-  ClientFormatMoveList(moves: List(#(String, List(String))))
 }
 
 fn handle_message(
@@ -62,11 +61,12 @@ fn handle_message(
     ApplyAiMove(id, move) -> {
       let assert Ok(server) = dict.get(state.game_map, id)
       game_server.apply_move_uci_string(server, move)
+      let fen = game_server.get_fen(server)
       // TODO: There should be a function called all_legal_moves_aggregated or something
       // that gives us the moves in the correct format instead of all this work we do here.
       // We are duplicating work by processing the moves twice.
       let unformatted_moves = game_server.all_legal_moves(server)
-      let _formatted_moves =
+      let formatted_moves =
         list.fold(
           unformatted_moves,
           ClientFormatMoveList(moves: []),
@@ -104,7 +104,13 @@ fn handle_message(
             }
           },
         )
-      io.println(move)
+
+      let ws_json_message =
+        update_game_message_to_json(BotMove(moves: formatted_moves, fen: fen))
+
+      io.println(ws_json_message)
+
+      // process.send(state.Send(id, ws_json_message))
 
       actor.continue(state)
     }
@@ -117,6 +123,11 @@ fn handle_message(
       let assert Ok(id) = uuid.generate_v7()
       let game_map = dict.insert(state.game_map, id, server)
       process.send(client, id)
+      actor.continue(GameManagerState(game_map, state.bot_server_pid))
+    }
+    RemoveGame(client, id) -> {
+      let game_map = dict.delete(state.game_map, id)
+      process.send(client, Ok(Nil))
       actor.continue(GameManagerState(game_map, state.bot_server_pid))
     }
   }

@@ -3,18 +3,21 @@ import gleam/dynamic.{field, string}
 import gleam/erlang/process.{type Subject}
 import gleam/http/request.{type Request}
 import gleam/http/response.{type Response}
-import gleam/io
-import gleam/json.{object, string as json_string}
+import gleam/json
 import gleam/option.{Some}
 import gleam/otp/actor
 import midori/bot_server
 import midori/bot_server_message.{SetGameManagerSubject}
+import midori/client_ws_message.{ConfirmMove, update_game_message_to_json}
 import midori/game_manager
-import midori/game_manager_message.{type GameManagerMessage, ApplyMove, NewGame}
+import midori/game_manager_message.{
+  type GameManagerMessage, ApplyMove, NewGame, RemoveGame,
+}
 import midori/ping_server.{type PingServerMessage}
 import midori/router
 import midori/uci_move.{convert_move}
 import midori/web.{Context}
+import midori/ws_server.{type WebsocketServerMessage}
 import mist.{type Connection, type ResponseData}
 import wisp
 
@@ -23,28 +26,12 @@ type State {
     id: String,
     ping_server_subject: Subject(PingServerMessage),
     game_manager_subject: Subject(GameManagerMessage),
+    ws_server_subject: Subject(WebsocketServerMessage),
   )
 }
 
 type ApplyMoveMessage {
   ApplyMoveMessage(move: String)
-}
-
-pub type UpdateGameMessage {
-  UpdateGameMessage(move: uci_move.UciMove)
-}
-
-pub fn update_game_message_to_json(
-  update_game_message: UpdateGameMessage,
-) -> String {
-  // let moves = update_game_message.moves.moves
-  // let moves_with_json_dests =
-  //   list.map(moves, fn(move) { #(move.0, array(move.1, of: json_string)) })
-  object([
-    // #("moves", object(moves_with_json_dests)),
-    #("move", json_string(update_game_message.move.move)),
-  ])
-  |> json.to_string
 }
 
 pub fn main() {
@@ -53,11 +40,12 @@ pub fn main() {
   wisp.configure_logger()
   let secret_key_base = wisp.random_string(64)
 
-  let assert Ok(bot_server) = bot_server.start_bot_server(option.None)
+  let assert Ok(ws_server_subject) = ws_server.start_ws_server()
+  let assert Ok(bot_server_subject) = bot_server.start_bot_server(option.None)
   let assert Ok(ping_server_subject) = ping_server.start_ping_server()
   let assert Ok(game_manager_subject) =
-    game_manager.start_game_manager(bot_server)
-  process.send(bot_server, SetGameManagerSubject(game_manager_subject))
+    game_manager.start_game_manager(bot_server_subject)
+  process.send(bot_server_subject, SetGameManagerSubject(game_manager_subject))
 
   // A context is constructed holding the static directory path.
   let ctx = Context(static_directory: static_directory())
@@ -76,12 +64,34 @@ pub fn main() {
         ["ws"] ->
           mist.websocket(
             request: req,
-            on_init: fn(_websocket) {
+            on_init: fn(websocket) {
               let id = process.call(game_manager_subject, NewGame, 10)
-              let state = State(id, ping_server_subject, game_manager_subject)
+              process.send(
+                ws_server_subject,
+                ws_server.AddConnection(recipient: id, connection: websocket),
+              )
+              let state =
+                State(
+                  id,
+                  ping_server_subject,
+                  game_manager_subject,
+                  ws_server_subject,
+                )
               #(state, Some(selector))
             },
-            on_close: fn(_state) { io.println("goodbye!") },
+            on_close: fn(state) {
+              process.send(
+                ws_server_subject,
+                ws_server.RemoveConnection(recipient: state.id),
+              )
+              let assert Ok(_) =
+                process.call(
+                  game_manager_subject,
+                  RemoveGame(reply_with: _, id: state.id),
+                  1000,
+                )
+              Nil
+            },
             handler: handle_ws_message,
           )
 
@@ -133,7 +143,7 @@ fn handle_ws_message(state: State, conn, message) {
               1000,
             )
           let update_game_message =
-            UpdateGameMessage(move: game_manager_response.move)
+            ConfirmMove(move: game_manager_response.move)
           let json = update_game_message_to_json(update_game_message)
 
           let assert Ok(_) = mist.send_text_frame(conn, json)
