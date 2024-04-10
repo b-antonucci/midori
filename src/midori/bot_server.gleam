@@ -110,6 +110,7 @@ pub fn start_bot_server(
     )
   let assert Ok(glexec.Pids(_pid, ospid)) =
     run_async(options, fairy_stockfish_command)
+  let assert Ok(_) = glexec.send(ospid, "setoption name Skill Level 1\n")
   actor.send(actor, SetOsPid(ospid))
   Ok(actor)
 }
