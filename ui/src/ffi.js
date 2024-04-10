@@ -20,9 +20,16 @@ export function get_data_field_array_js(some_object, field) {
   return data_object[field];
 }
 
-export function get_data_field_object_js(some_object, field) {
+export function get_data_field_object_as_array_js(some_object, field) {
   let data_object = JSON.parse(some_object.data);
-  return JSON.stringify(data_object[field]);
+  let field_data = data_object[field];
+  let field_map = new Map(Object.entries(field_data));
+  let array = [];
+  field_map.forEach((value, key) => {
+    value.unshift(key);
+    array.push(value);
+  });
+  return array;
 }
 
 export function ws_init_js() {

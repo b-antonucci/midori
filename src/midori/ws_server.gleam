@@ -5,12 +5,8 @@ import mist.{type WebsocketConnection}
 
 import gleam/dict
 import midori/game_id.{type GameId}
-
-// TODO: These should all be sync calls instead of async
-pub type WebsocketServerMessage {
-  Send(recipient: GameId, message: String)
-  AddConnection(recipient: GameId, connection: WebsocketConnection)
-  RemoveConnection(recipient: GameId)
+import midori/ws_server_message.{
+  type WebsocketServerMessage, AddConnection, RemoveConnection, Send,
 }
 
 pub type WebsocketServerState {

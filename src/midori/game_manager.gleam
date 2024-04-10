@@ -2,7 +2,6 @@ import game_server.{type Message, new_game_from_fen}
 import gleam/dict.{type Dict}
 import gleam/dynamic.{list}
 import gleam/erlang/process.{type Subject}
-import gleam/io
 import gleam/list
 import gleam/option.{Some}
 import gleam/otp/actor
@@ -16,6 +15,7 @@ import midori/game_manager_message.{
   type GameManagerMessage, ApplyAiMove, ApplyMove, ConfirmMove, NewGame,
   RemoveGame, Shutdown,
 }
+import midori/ws_server_message.{type WebsocketServerMessage, Send}
 import move.{Normal}
 import piece.{Bishop, Knight, Queen, Rook}
 import position
@@ -24,6 +24,7 @@ pub type GameManagerState {
   GameManagerState(
     game_map: Dict(String, Subject(Message)),
     bot_server_pid: Subject(BotServerMessage),
+    ws_server_subject: Subject(WebsocketServerMessage),
   )
 }
 
@@ -108,9 +109,7 @@ fn handle_message(
       let ws_json_message =
         update_game_message_to_json(BotMove(moves: formatted_moves, fen: fen))
 
-      io.println(ws_json_message)
-
-      // process.send(state.Send(id, ws_json_message))
+      process.send(state.ws_server_subject, Send(id, ws_json_message))
 
       actor.continue(state)
     }
@@ -123,19 +122,33 @@ fn handle_message(
       let assert Ok(id) = uuid.generate_v7()
       let game_map = dict.insert(state.game_map, id, server)
       process.send(client, id)
-      actor.continue(GameManagerState(game_map, state.bot_server_pid))
+      actor.continue(GameManagerState(
+        game_map,
+        state.bot_server_pid,
+        state.ws_server_subject,
+      ))
     }
     RemoveGame(client, id) -> {
       let game_map = dict.delete(state.game_map, id)
       process.send(client, Ok(Nil))
-      actor.continue(GameManagerState(game_map, state.bot_server_pid))
+      actor.continue(GameManagerState(
+        game_map,
+        state.bot_server_pid,
+        state.ws_server_subject,
+      ))
     }
   }
 }
 
-pub fn start_game_manager(bot_server_pid: Subject(BotServerMessage)) {
+pub fn start_game_manager(
+  bot_server_pid: Subject(BotServerMessage),
+  ws_server_subject: Subject(WebsocketServerMessage),
+) {
   let game_map = dict.new()
   let actor =
-    actor.start(GameManagerState(game_map, bot_server_pid), handle_message)
+    actor.start(
+      GameManagerState(game_map, bot_server_pid, ws_server_subject),
+      handle_message,
+    )
   actor
 }

@@ -90,7 +90,21 @@ pub fn start_bot_server(
               list.first(string.split(string.trim(move), " "))
             actor.send(actor, SendBotMove(move))
           }
-          _ -> Nil
+          other -> {
+            case
+              list.find(string.split(other, "\n"), fn(line) {
+                string.contains(line, "bestmove")
+              })
+            {
+              Ok(move) -> {
+                let assert Ok(move) =
+                  list.at(string.split(string.trim(move), " "), 1)
+                actor.send(actor, SendBotMove(move))
+              }
+              Error(_) -> Nil
+            }
+            Nil
+          }
         }
       }),
     )

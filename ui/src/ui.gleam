@@ -1,15 +1,16 @@
 import config.{type Config, Config, Moveable}
 import file.{A, B, C, D, E, F, G, H}
-import gchessboard.{Set, init, update, view}
+import gchessboard.{NextTurn, Set, SetFen, SetMoves, init, update, view}
 import gleam/javascript/array.{type Array}
+import gleam/list
 import gleam/option.{type Option, None, Some}
 import lustre.{application, dispatch}
 import lustre/effect
 import lustre/element/html.{div, text}
 import lustre/event
-import position.{type Position, Position}
+import position.{type Position, Position, from_string}
 import rank.{Four, One, Three, Two}
-import types.{type MoveData, White}
+import types.{type Destinations, type MoveData, type Origin, White}
 
 pub type Websocket
 
@@ -86,8 +87,11 @@ pub fn get_data_field_js(object: String, field: String) -> String
 @external(javascript, "./ffi.js", "get_data_field_array_js")
 pub fn get_data_field_array_js(object: String, field: String) -> Array(String)
 
-@external(javascript, "./ffi.js", "get_data_field_object_js")
-pub fn get_data_field_object_js(object: String, field: String) -> String
+@external(javascript, "./ffi.js", "get_data_field_object_as_array_js")
+pub fn get_data_field_object_as_array_js(
+  object: String,
+  field: String,
+) -> Array(Array(String))
 
 pub fn main() {
   let socket = ws_init_js()
@@ -100,7 +104,36 @@ pub fn main() {
       "pong" -> {
         Nil
       }
-      _some_data -> {
+      "{\"moves\":" <> _ -> {
+        let moves_array = get_data_field_object_as_array_js(message, "moves")
+        let fen = get_data_field_js(message, "fen")
+        let moves_list = array.to_list(moves_array)
+        let moves =
+          list.fold(moves_list, [], fn(acc, item) {
+            let move_set_list = array.to_list(item)
+            let assert Ok(origin) = list.first(move_set_list)
+            let destinations = case move_set_list {
+              [_, ..destinations] -> {
+                destinations
+              }
+              _ -> {
+                panic("Invalid move set")
+              }
+            }
+            let origin: Origin = from_string(origin)
+            let destinations: Destinations =
+              list.fold(destinations, [], fn(acc, item) {
+                let destination = from_string(item)
+                list.prepend(acc, destination)
+              })
+            list.prepend(acc, #(origin, destinations))
+          })
+        interface(dispatch(SetFen(fen)))
+        interface(dispatch(SetMoves(moves)))
+        interface(dispatch(NextTurn))
+        Nil
+      }
+      _ws_message -> {
         let _move = get_data_field_js(message, "move")
         Nil
       }
