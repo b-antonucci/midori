@@ -41,9 +41,12 @@ fn handle_message(
       state
     }
     SendBotMove(move) -> {
-      let assert Ok(#(game_id, _)) = queue.pop_front(state.move_request_queue)
+      let assert Ok(#(game_id, new_queue)) =
+        queue.pop_front(state.move_request_queue)
       let assert option.Some(game_manager_subject) = state.game_server_subject
       process.send(game_manager_subject, ApplyAiMove(game_id, move))
+      let state =
+        BotServerState(state.game_server_subject, state.ospid, new_queue)
       state
     }
     SetOsPid(ospid) -> {

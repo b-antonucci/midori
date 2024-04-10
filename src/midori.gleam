@@ -10,13 +10,15 @@ import midori/bot_server
 import midori/bot_server_message.{SetGameManagerSubject}
 import midori/client_ws_message.{ConfirmMove, update_game_message_to_json}
 import midori/game_manager
-import midori/game_manager_message.{type GameManagerMessage, ApplyMove, NewGame}
+import midori/game_manager_message.{
+  type GameManagerMessage, ApplyMove, NewGame, RemoveGame,
+}
 import midori/ping_server.{type PingServerMessage}
 import midori/router
 import midori/uci_move.{convert_move}
 import midori/web.{Context}
 import midori/ws_server
-import midori/ws_server_message.{type WebsocketServerMessage}
+import midori/ws_server_message.{type WebsocketServerMessage, RemoveConnection}
 import mist.{type Connection, type ResponseData}
 import wisp
 
@@ -81,7 +83,16 @@ pub fn main() {
                 )
               #(state, Some(selector))
             },
-            on_close: fn(_state) { Nil },
+            on_close: fn(state) {
+              let assert Ok(_) =
+                process.call(
+                  state.game_manager_subject,
+                  RemoveGame(_, state.id),
+                  100,
+                )
+              process.send(state.ws_server_subject, RemoveConnection(state.id))
+              Nil
+            },
             handler: handle_ws_message,
           )
 
@@ -117,7 +128,7 @@ pub type MyMessage {
 fn handle_ws_message(state: State, conn, message) {
   case message {
     mist.Text("ping") -> {
-      process.send(state.ping_server_subject, ping_server.Ping(conn))
+      // process.send(state.ping_server_subject, ping_server.Ping(conn))
       actor.continue(state)
     }
     mist.Text(ws_message) -> {
