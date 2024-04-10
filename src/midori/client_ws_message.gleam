@@ -18,7 +18,7 @@ pub fn update_game_message_to_json(
 ) -> String {
   case update_game_message {
     ConfirmMove(move) -> {
-      object([#("move", json_string(move.move))])
+      object([#("move", json_string(move))])
       |> json.to_string
     }
     BotMove(moves, fen) -> {

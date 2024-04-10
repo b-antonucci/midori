@@ -36,7 +36,7 @@ fn handle_message(
     Shutdown -> actor.Stop(process.Normal)
     ApplyMove(client, id, move) -> {
       let assert Ok(server) = dict.get(state.game_map, id)
-      game_server.apply_move_uci_string(server, move.move)
+      game_server.apply_move_uci_string(server, move)
       let legal_moves = game_server.all_legal_moves(server)
       let length = list.length(legal_moves)
       case length {
