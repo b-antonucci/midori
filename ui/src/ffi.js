@@ -38,13 +38,12 @@ export function ws_init_js() {
   socket.onopen = function (e) {
     // alert("[open] Connection established");
     // alert("Sending to server");
-    socket.send("ping");
   };
 
   socket.onmessage = function (event) {
     // on ping
-    if (event.data === "pong") {
-      socket.send("ping");
+    if (event.data === "1") {
+      socket.send("0");
       return;
     }
     // alert(`[message] Data received from server: ${event.data}`);

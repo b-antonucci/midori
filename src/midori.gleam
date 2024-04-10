@@ -127,7 +127,7 @@ pub type MyMessage {
 
 fn handle_ws_message(state: State, conn, message) {
   case message {
-    mist.Text("ping") -> {
+    mist.Text("0") -> {
       // process.send(state.ping_server_subject, ping_server.Ping(conn))
       actor.continue(state)
     }
