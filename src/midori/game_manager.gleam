@@ -1,4 +1,4 @@
-import game_server.{type Message, new_game_from_fen}
+import game_server.{type Message, new_game_from_fen, shutdown}
 import gleam/dict.{type Dict}
 import gleam/dynamic.{list}
 import gleam/erlang/process.{type Subject}
@@ -129,6 +129,8 @@ fn handle_message(
       ))
     }
     RemoveGame(client, id) -> {
+      let assert Ok(server) = dict.get(state.game_map, id)
+      shutdown(server)
       let game_map = dict.delete(state.game_map, id)
       process.send(client, Ok(Nil))
       actor.continue(GameManagerState(
