@@ -75,7 +75,7 @@ fn handle_message(
             let origin = move.from
             let origin_string = position.to_string(origin)
             let promo = case move {
-              Normal(_, _, _, Some(promo)) ->
+              Normal(_, _, Some(promo)) ->
                 case promo.kind {
                   Queen -> "q"
                   Rook -> "r"
