@@ -66,7 +66,7 @@ pub fn main() {
           mist.websocket(
             request: req,
             on_init: fn(websocket) {
-              let id = process.call(game_manager_subject, NewGame, 10)
+              let id = process.call(game_manager_subject, NewGame, 1000)
               process.send(
                 ws_server_subject,
                 ws_server_message.AddConnection(
@@ -88,7 +88,7 @@ pub fn main() {
                 process.call(
                   state.game_manager_subject,
                   RemoveGame(_, state.id),
-                  100,
+                  1000,
                 )
               process.send(state.ws_server_subject, RemoveConnection(state.id))
               Nil
