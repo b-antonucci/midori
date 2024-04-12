@@ -5,4 +5,3 @@ priv
 erl_crash.dump
 ui/gchessboard
 gchess
-gleam_erlexec
