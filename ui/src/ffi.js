@@ -33,7 +33,7 @@ export function get_data_field_object_as_array_js(some_object, field) {
 }
 
 export function ws_init_js() {
-  const socket = new WebSocket("ws://" + location.host + "/ws");
+  const socket = new WebSocket("wss://" + location.host + "/ws");
 
   socket.onopen = function (e) {
     // alert("[open] Connection established");
