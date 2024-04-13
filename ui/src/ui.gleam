@@ -1,16 +1,20 @@
 import config.{type Config, Config, Moveable}
 import file.{A, B, C, D, E, F, G, H}
-import gchessboard.{NextTurn, Set, SetFen, SetMoves, init, update, view}
+import gchessboard.{
+  NextTurn, Set, SetFen, SetMoves, SetPromotions, init, update, view,
+}
+import gleam/dict
 import gleam/javascript/array.{type Array}
 import gleam/list
 import gleam/option.{type Option, None, Some}
+import gleam/string
 import lustre.{application, dispatch}
 import lustre/effect
 import lustre/element/html.{div, text}
 import lustre/event
 import position.{type Position, Position, from_string}
 import rank.{Four, One, Three, Two}
-import types.{type Destinations, type MoveData, type Origin, White}
+import types.{type MoveData, type Origin, White}
 
 pub type Websocket
 
@@ -108,8 +112,8 @@ pub fn main() {
         let moves_array = get_data_field_object_as_array_js(message, "moves")
         let fen = get_data_field_js(message, "fen")
         let moves_list = array.to_list(moves_array)
-        let moves =
-          list.fold(moves_list, [], fn(acc, item) {
+        let #(moves, promo_moves) =
+          list.fold(moves_list, #([], []), fn(acc, item) {
             let move_set_list = array.to_list(item)
             let assert Ok(origin) = list.first(move_set_list)
             let destinations = case move_set_list {
@@ -121,15 +125,34 @@ pub fn main() {
               }
             }
             let origin: Origin = from_string(origin)
-            let destinations: Destinations =
-              list.fold(destinations, [], fn(acc, item) {
-                let destination = from_string(item)
-                list.prepend(acc, destination)
+            let #(destinations, promo_destinations) =
+              list.fold(destinations, #([], dict.new()), fn(acc, item) {
+                case string.length(item) {
+                  2 -> {
+                    let destination = from_string(item)
+                    #(list.prepend(acc.0, destination), acc.1)
+                  }
+                  3 -> {
+                    let destination = from_string(string.slice(item, 0, 2))
+                    #(
+                      list.prepend(acc.0, destination),
+                      // TODO: check if dict is empty first? is there a better way to do this?
+                      dict.insert(acc.1, origin, destination),
+                    )
+                  }
+                  _ -> {
+                    panic("Invalid destination")
+                  }
+                }
               })
-            list.prepend(acc, #(origin, destinations))
+            #(
+              list.prepend(acc.0, #(origin, destinations)),
+              list.append(acc.1, dict.to_list(promo_destinations)),
+            )
           })
         interface(dispatch(SetFen(fen)))
         interface(dispatch(SetMoves(moves)))
+        interface(dispatch(SetPromotions(promo_moves)))
         interface(dispatch(NextTurn))
         Nil
       }
