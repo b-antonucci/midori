@@ -87,33 +87,31 @@ pub fn start_bot_server(
     |> glexec.with_stdin(glexec.StdinPipe)
     |> glexec.with_stdout(
       glexec.StdoutFun(fn(_atom, _int, string) {
-        case string {
-          "bestmove" <> move -> {
+        case string.split(string, "bestmove") {
+          [_] -> Nil
+          [_, move] -> {
             let assert Ok(move) =
               list.first(string.split(string.trim(move), " "))
+            // io.println("Sending move: " <> move)
             actor.send(actor, SendBotMove(move))
-          }
-          other -> {
-            case
-              list.find(string.split(other, "\n"), fn(line) {
-                string.contains(line, "bestmove")
-              })
-            {
-              Ok(move) -> {
-                let assert Ok(move) =
-                  list.at(string.split(string.trim(move), " "), 1)
-                actor.send(actor, SendBotMove(move))
-              }
-              Error(_) -> Nil
-            }
             Nil
           }
+          [_, ..moves] -> {
+            //multiple moves, we need to extract each move and send it to the game manager
+            list.map(moves, fn(move) {
+              let assert Ok(move) =
+                list.first(string.split(string.trim(move), " "))
+              actor.send(actor, SendBotMove(move))
+            })
+            Nil
+          }
+          _ -> Nil
         }
       }),
     )
   let assert Ok(glexec.Pids(_pid, ospid)) =
     run_async(options, fairy_stockfish_command)
-  let assert Ok(_) = glexec.send(ospid, "setoption name Skill Level 1\n")
+  let assert Ok(_) = glexec.send(ospid, "setoption name Skill Level value 1\n")
   actor.send(actor, SetOsPid(ospid))
   Ok(actor)
 }
