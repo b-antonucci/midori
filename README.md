@@ -1,5 +1,5 @@
 # midori
-Midori is a WIP real-time chess server.
+Midori is a WIP real-time chess server and browser client.
 
 Deployed at [shahmat.org](https://shahmat.org/)
 
