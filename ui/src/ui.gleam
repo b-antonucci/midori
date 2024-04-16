@@ -56,7 +56,7 @@ pub type UiMsg {
 pub fn console_log_js_ui_state(message: UiState) -> Nil
 
 @external(javascript, "./ffi.js", "alert_js")
-pub fn alert_js(message: Int) -> Nil
+pub fn alert_js_int(message: Int) -> Nil
 
 @external(javascript, "./ffi.js", "alert_js")
 pub fn alert_js_string(message: String) -> Nil
