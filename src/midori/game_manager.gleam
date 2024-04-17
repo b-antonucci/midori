@@ -36,7 +36,7 @@ fn handle_message(
     Shutdown -> actor.Stop(process.Normal)
     ApplyMove(client, id, move) -> {
       let assert Ok(server) = dict.get(state.game_map, id)
-      game_server.apply_move_uci_string(server, move)
+      let assert Ok(_) = game_server.apply_move_uci_string(server, move)
       let legal_moves = game_server.all_legal_moves(server)
       let length = list.length(legal_moves)
       case length {
@@ -61,7 +61,7 @@ fn handle_message(
     }
     ApplyAiMove(id, move) -> {
       let assert Ok(server) = dict.get(state.game_map, id)
-      game_server.apply_move_uci_string(server, move)
+      let assert Ok(_) = game_server.apply_move_uci_string(server, move)
       let fen = game_server.get_fen(server)
       // TODO: There should be a function called all_legal_moves_aggregated or something
       // that gives us the moves in the correct format instead of all this work we do here.
@@ -115,10 +115,11 @@ fn handle_message(
     }
     NewGame(client) -> {
       let server: Subject(Message) = game_server.new_server()
-      new_game_from_fen(
-        server,
-        "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-      )
+      let assert Ok(_) =
+        new_game_from_fen(
+          server,
+          "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+        )
       let assert Ok(id) = uuid.generate_v7()
       let game_map = dict.insert(state.game_map, id, server)
       process.send(client, id)
