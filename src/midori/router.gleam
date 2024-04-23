@@ -22,7 +22,7 @@ const html = "
 
 <body>
     <div ui-lustre-app></div>
-    <div gchessboard-lustre-app></div>
+    <div id=\"no-context-menu-wrapper\"><div gchessboard-lustre-app></div></div>
 </body>
 
 </html>

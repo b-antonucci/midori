@@ -114,7 +114,7 @@ fn handle_message(
       actor.continue(state)
     }
     NewGame(client) -> {
-      let server: Subject(Message) = game_server.new_server()
+      let assert Ok(server) = game_server.new_server()
       let assert Ok(_) =
         new_game_from_fen(
           server,
