@@ -1,3 +1,4 @@
+import gleam/io
 import gleam/string_builder
 import midori/web.{type Context}
 import wisp.{type Request, type Response}
@@ -29,6 +30,12 @@ const html = "
 "
 
 pub fn handle_request(req: Request, ctx: Context) -> Response {
-  use _req <- web.middleware(req, ctx)
-  wisp.html_response(string_builder.from_string(html), 200)
+  use req <- web.middleware(req, ctx)
+  case wisp.path_segments(req) {
+    ["request_game_with_computer"] -> {
+      io.println("Requesting game with computer")
+      wisp.html_response(string_builder.from_string("hello"), 200)
+    }
+    _ -> wisp.html_response(string_builder.from_string(html), 200)
+  }
 }

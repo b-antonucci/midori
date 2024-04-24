@@ -89,6 +89,19 @@ export function ws_send_move_js(socket, message) {
   socket.send(JSON.stringify(message));
 }
 
+export function request_game_with_computer_js() {
+  // let fetchRes = fetch(
+  //   "http://" + window.location.host + "/request_game_with_computer");
+    let fetchRes = fetch("/request_game_with_computer");
+        
+  // FetchRes is the promise to resolve
+  // it by using.then() method
+  fetchRes.then(res =>
+      res.status).then(d => {
+          console.log(d)
+      })
+}
+
 export function console_log_js(message) {
   console.log(message);
 }

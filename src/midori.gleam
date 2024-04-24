@@ -16,19 +16,21 @@ import midori/game_manager_message.{
 import midori/ping_server.{type PingServerMessage}
 import midori/router
 import midori/uci_move.{convert_move}
+import midori/user_manager.{type UserManagerMessage, AddUser, RemoveUser}
 import midori/web.{Context}
 import midori/ws_server
 import midori/ws_server_message.{type WebsocketServerMessage, RemoveConnection}
 import mist.{type Connection, type ResponseData}
 import wisp
 
-type State {
-  State(
+type ConnectionState {
+  ConnectionState(
     id: String,
     ping_server_subject: Subject(PingServerMessage),
     game_manager_subject: Subject(GameManagerMessage),
     ws_server_subject: Subject(WebsocketServerMessage),
   )
+  ConnectionErrorState
 }
 
 type ApplyMoveMessage {
@@ -44,6 +46,7 @@ pub fn main() {
   let assert Ok(ws_server_subject) = ws_server.start_ws_server()
   let assert Ok(bot_server_subject) = bot_server.start_bot_server(option.None)
   let assert Ok(ping_server_subject) = ping_server.start_ping_server()
+  let assert Ok(user_manager_subject) = user_manager.start_user_manager()
   let assert Ok(game_manager_subject) =
     game_manager.start_game_manager(bot_server_subject, ws_server_subject)
   process.send(bot_server_subject, SetGameManagerSubject(game_manager_subject))
@@ -66,31 +69,37 @@ pub fn main() {
           mist.websocket(
             request: req,
             on_init: fn(websocket) {
-              let id = process.call(game_manager_subject, NewGame, 1000)
-              process.send(
-                ws_server_subject,
-                ws_server_message.AddConnection(
-                  recipient: id,
-                  connection: websocket,
-                ),
-              )
-              let state =
-                State(
-                  id,
-                  ping_server_subject,
-                  game_manager_subject,
-                  ws_server_subject,
-                )
-              #(state, Some(selector))
+              case process.call(user_manager_subject, AddUser, 1000) {
+                Ok(id) -> {
+                  process.send(
+                    ws_server_subject,
+                    ws_server_message.AddConnection(
+                      recipient: id,
+                      connection: websocket,
+                    ),
+                  )
+                  let state =
+                    ConnectionState(
+                      id,
+                      ping_server_subject,
+                      game_manager_subject,
+                      ws_server_subject,
+                    )
+                  #(state, Some(selector))
+                }
+                Error(_msg) -> {
+                  #(ConnectionErrorState, Some(selector))
+                }
+              }
             },
-            on_close: fn(state) {
-              let assert Ok(_) =
-                process.call(
-                  state.game_manager_subject,
-                  RemoveGame(_, state.id),
-                  1000,
-                )
-              process.send(state.ws_server_subject, RemoveConnection(state.id))
+            on_close: fn(_state) {
+              // let assert Ok(_) =
+              //   process.call(
+              //     state.game_manager_subject,
+              //     RemoveGame(_, state.id),
+              //     1000,
+              //   )
+              // process.send(state.ws_server_subject, RemoveConnection(state.id))
               Nil
             },
             handler: handle_ws_message,
@@ -125,46 +134,56 @@ pub type MyMessage {
   Broadcast(String)
 }
 
-fn handle_ws_message(state: State, conn, message) {
-  case message {
-    mist.Text("0") -> {
-      // process.send(state.ping_server_subject, ping_server.Ping(conn))
-      actor.continue(state)
-    }
-    mist.Text(ws_message) -> {
-      let message_decoder =
-        dynamic.decode1(ApplyMoveMessage, field("move", string))
+fn handle_ws_message(state: ConnectionState, conn, message) {
+  case state {
+    ConnectionState(
+        id,
+        ping_server_subject,
+        game_manager_subject,
+        ws_server_subject,
+      ) -> {
+      case message {
+        mist.Text("0") -> {
+          // process.send(state.ping_server_subject, ping_server.Ping(conn))
+          actor.continue(state)
+        }
+        mist.Text(ws_message) -> {
+          let message_decoder =
+            dynamic.decode1(ApplyMoveMessage, field("move", string))
 
-      case json.decode(ws_message, message_decoder) {
-        Ok(ApplyMoveMessage(move)) -> {
-          let game_manager_response =
-            process.call(
-              state.game_manager_subject,
-              ApplyMove(_, state.id, convert_move(move)),
-              1000,
-            )
-          let update_game_message =
-            ConfirmMove(move: game_manager_response.move)
-          let json = update_game_message_to_json(update_game_message)
+          case json.decode(ws_message, message_decoder) {
+            Ok(ApplyMoveMessage(move)) -> {
+              let game_manager_response =
+                process.call(
+                  game_manager_subject,
+                  ApplyMove(_, id, convert_move(move)),
+                  1000,
+                )
+              let update_game_message =
+                ConfirmMove(move: game_manager_response.move)
+              let json = update_game_message_to_json(update_game_message)
 
-          let assert Ok(_) = mist.send_text_frame(conn, json)
+              let assert Ok(_) = mist.send_text_frame(conn, json)
+
+              actor.continue(state)
+            }
+            Error(_) -> {
+              actor.continue(state)
+            }
+          }
 
           actor.continue(state)
         }
-        Error(_) -> {
+        mist.Text(_) | mist.Binary(_) -> {
           actor.continue(state)
         }
+        mist.Custom(Broadcast(text)) -> {
+          let assert Ok(_) = mist.send_text_frame(conn, text)
+          actor.continue(state)
+        }
+        mist.Closed | mist.Shutdown -> actor.Stop(process.Normal)
       }
-
-      actor.continue(state)
     }
-    mist.Text(_) | mist.Binary(_) -> {
-      actor.continue(state)
-    }
-    mist.Custom(Broadcast(text)) -> {
-      let assert Ok(_) = mist.send_text_frame(conn, text)
-      actor.continue(state)
-    }
-    mist.Closed | mist.Shutdown -> actor.Stop(process.Normal)
+    ConnectionErrorState -> actor.continue(state)
   }
 }

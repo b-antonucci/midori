@@ -38,18 +38,27 @@ pub type PromotionMenuClickData {
 }
 
 pub type UiState {
-  UiState(
+  UiState(mode: UiMode)
+}
+
+pub type UiMode {
+  LobbyMode
+  GameMode(
     promotion: Bool,
-    on_click: Option(fn(PromotionMenuClickData, Position, Position) -> Nil),
+    promotion_on_click: Option(
+      fn(PromotionMenuClickData, Position, Position) -> Nil,
+    ),
     from: Option(Position),
     to: Option(Position),
   )
 }
 
 pub type UiMsg {
+  ChangeMode(UiMode)
   ShowPromotion(from: Position, to: Position)
   CallOnClick(PromotionMenuOptions)
   SetOnClick(fn(PromotionMenuClickData, Position, Position) -> Nil)
+  RequestGameWithComputer
 }
 
 @external(javascript, "./ffi.js", "console_log_js")
@@ -96,6 +105,9 @@ pub fn get_data_field_object_as_array_js(
   object: String,
   field: String,
 ) -> Array(Array(String))
+
+@external(javascript, "./ffi.js", "request_game_with_computer_js")
+pub fn request_game_with_computer_js() -> Nil
 
 pub fn main() {
   let socket = ws_init_js()
@@ -264,40 +276,47 @@ pub fn main() {
 }
 
 pub fn ui_init(_) {
-  #(
-    UiState(promotion: False, on_click: None, from: None, to: None),
-    effect.none(),
-  )
+  #(UiState(mode: LobbyMode), effect.none())
 }
 
-pub fn ui_update(state, msg) {
+pub fn ui_update(state: UiState, msg) {
   case msg {
+    ChangeMode(mode) -> {
+      #(UiState(mode: mode), effect.none())
+    }
     ShowPromotion(from, to) -> {
-      #(
-        UiState(..state, promotion: True, from: Some(from), to: Some(to)),
-        effect.none(),
-      )
+      case state.mode {
+        GameMode(promotion, promotion_on_click, from, to) -> {
+          #(
+            UiState(mode: GameMode(
+              promotion: True,
+              from: from,
+              to: to,
+              promotion_on_click: promotion_on_click,
+            )),
+            effect.none(),
+          )
+        }
+        LobbyMode -> {
+          #(state, effect.none())
+        }
+      }
     }
     CallOnClick(promo_menu_choice) -> {
-      case state {
-        UiState(
-            promotion: True,
-            on_click: Some(on_click),
-            from: Some(from),
-            to: Some(to),
-          ) -> {
-          on_click(
+      case state.mode {
+        GameMode(promotion, Some(promotion_on_click), Some(from), Some(to)) -> {
+          promotion_on_click(
             PromotionMenuClickData(promotion: promo_menu_choice),
             from,
             to,
           )
           #(
-            UiState(
+            UiState(mode: GameMode(
               promotion: False,
-              on_click: state.on_click,
               from: None,
               to: None,
-            ),
+              promotion_on_click: Some(promotion_on_click),
+            )),
             effect.none(),
           )
         }
@@ -307,22 +326,40 @@ pub fn ui_update(state, msg) {
       }
     }
     SetOnClick(on_click) -> {
-      #(
-        UiState(
-          promotion: state.promotion,
-          on_click: Some(on_click),
-          from: state.from,
-          to: state.to,
-        ),
-        effect.none(),
-      )
+      case state.mode {
+        GameMode(promotion, _, from, to) -> {
+          #(
+            UiState(mode: GameMode(
+              promotion: promotion,
+              promotion_on_click: Some(on_click),
+              from: from,
+              to: to,
+            )),
+            effect.none(),
+          )
+        }
+        LobbyMode -> {
+          #(state, effect.none())
+        }
+      }
+    }
+    RequestGameWithComputer -> {
+      case state.mode {
+        LobbyMode -> {
+          request_game_with_computer_js()
+          #(state, effect.none())
+        }
+        GameMode(_, _, _, _) -> {
+          #(state, effect.none())
+        }
+      }
     }
   }
 }
 
-pub fn ui_view(state) {
-  case state {
-    UiState(promotion: True, on_click: _, from: _from, to: _to) -> {
+pub fn ui_view(state: UiState) {
+  case state.mode {
+    GameMode(_, _, _, _) -> {
       div([], [
         html.button([event.on("click", fn(_) { Ok(CallOnClick(Queen)) })], [
           text("Queen"),
@@ -338,8 +375,12 @@ pub fn ui_view(state) {
         ]),
       ])
     }
-    UiState(promotion: False, on_click: _, from: _, to: _) -> {
-      div([], [])
+    LobbyMode -> {
+      div([], [
+        html.button([event.on("click", fn(_) { Ok(RequestGameWithComputer) })], [
+          text("PLAY WITH THE COMPUTER"),
+        ]),
+      ])
     }
   }
 }
