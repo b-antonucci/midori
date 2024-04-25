@@ -1,7 +1,9 @@
+import gleam/bit_array.{base64_decode}
 import gleam/bytes_builder
+import gleam/dict
 import gleam/dynamic.{field, string}
 import gleam/erlang/process.{type Subject}
-import gleam/http/request.{type Request}
+import gleam/http/request.{type Request, Request, get_cookies}
 import gleam/http/response.{type Response}
 import gleam/json
 import gleam/option.{Some}
@@ -10,16 +12,14 @@ import midori/bot_server
 import midori/bot_server_message.{SetGameManagerSubject}
 import midori/client_ws_message.{ConfirmMove, update_game_message_to_json}
 import midori/game_manager
-import midori/game_manager_message.{
-  type GameManagerMessage, ApplyMove, NewGame, RemoveGame,
-}
+import midori/game_manager_message.{type GameManagerMessage, ApplyMove}
 import midori/ping_server.{type PingServerMessage}
 import midori/router
 import midori/uci_move.{convert_move}
-import midori/user_manager.{type UserManagerMessage, AddUser, RemoveUser}
+import midori/user_manager
 import midori/web.{Context}
 import midori/ws_server
-import midori/ws_server_message.{type WebsocketServerMessage, RemoveConnection}
+import midori/ws_server_message.{type WebsocketServerMessage}
 import mist.{type Connection, type ResponseData}
 import wisp
 
@@ -52,7 +52,12 @@ pub fn main() {
   process.send(bot_server_subject, SetGameManagerSubject(game_manager_subject))
 
   // A context is constructed holding the static directory path.
-  let ctx = Context(static_directory: static_directory())
+  let ctx =
+    Context(
+      static_directory: static_directory(),
+      game_manager_subject: game_manager_subject,
+      user_manager_subject: user_manager_subject,
+    )
 
   // The handle_request function is partially applied with the context to make
   // the request handler function that only takes a request.
@@ -68,26 +73,25 @@ pub fn main() {
         ["ws"] ->
           mist.websocket(
             request: req,
-            on_init: fn(websocket) {
-              case process.call(user_manager_subject, AddUser, 1000) {
-                Ok(id) -> {
-                  process.send(
-                    ws_server_subject,
-                    ws_server_message.AddConnection(
-                      recipient: id,
-                      connection: websocket,
-                    ),
-                  )
+            on_init: fn(_websocket) {
+              case mist.read_body(req, 1000) {
+                Ok(req_body) -> {
+                  let assert Ok(encoded_user_id) =
+                    dict.get(dict.from_list(get_cookies(req_body)), "user_id")
+                  let assert Ok(user_id_bit_array) =
+                    base64_decode(encoded_user_id)
+                  let assert Ok(user_id) =
+                    bit_array.to_string(user_id_bit_array)
                   let state =
                     ConnectionState(
-                      id,
+                      user_id,
                       ping_server_subject,
                       game_manager_subject,
                       ws_server_subject,
                     )
                   #(state, Some(selector))
                 }
-                Error(_msg) -> {
+                Error(_) -> {
                   #(ConnectionErrorState, Some(selector))
                 }
               }
@@ -138,9 +142,9 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
   case state {
     ConnectionState(
         id,
-        ping_server_subject,
+        _ping_server_subject,
         game_manager_subject,
-        ws_server_subject,
+        _ws_server_subject,
       ) -> {
       case message {
         mist.Text("0") -> {

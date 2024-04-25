@@ -1,7 +1,15 @@
+import gleam/erlang/process.{type Subject}
+import midori/game_manager_message.{type GameManagerMessage}
+import midori/user_manager.{type UserManagerMessage}
+
 import wisp
 
 pub type Context {
-  Context(static_directory: String)
+  Context(
+    static_directory: String,
+    game_manager_subject: Subject(GameManagerMessage),
+    user_manager_subject: Subject(UserManagerMessage),
+  )
 }
 
 pub fn middleware(

@@ -120,9 +120,9 @@ fn handle_message(
           server,
           "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
         )
-      let assert Ok(id) = uuid.generate_v7()
-      let game_map = dict.insert(state.game_map, id, server)
-      process.send(client, id)
+      let assert Ok(game_id) = uuid.generate_v7()
+      let game_map = dict.insert(state.game_map, game_id, server)
+      process.send(client, game_id)
       actor.continue(GameManagerState(
         game_map,
         state.bot_server_pid,
