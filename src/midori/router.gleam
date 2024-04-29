@@ -1,6 +1,4 @@
-import gleam/bit_array
 import gleam/erlang/process
-import gleam/io
 import gleam/json
 import gleam/string_builder
 import midori/game_manager_message.{NewGame}
