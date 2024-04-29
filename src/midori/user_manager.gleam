@@ -12,6 +12,7 @@ pub type UserManagerMessage {
     user_id: String,
     game_id: String,
   )
+  ConfirmUserExists(reply_with: Subject(Result(Nil, String)), id: String)
 }
 
 pub type UserId =
@@ -67,6 +68,18 @@ fn handle_message(
           actor.continue(new_state)
         }
         Error(_) -> {
+          process.send(reply_with, Error("User not found"))
+          actor.continue(state)
+        }
+      }
+    }
+    ConfirmUserExists(reply_with, id) -> {
+      case dict.has_key(state.users, id) {
+        True -> {
+          process.send(reply_with, Ok(Nil))
+          actor.continue(state)
+        }
+        False -> {
           process.send(reply_with, Error("User not found"))
           actor.continue(state)
         }

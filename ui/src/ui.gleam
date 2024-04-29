@@ -1,7 +1,8 @@
 import config.{type Config, Config, Moveable}
 import file.{A, B, C, D, E, F, G, H}
 import gchessboard.{
-  NextTurn, Set, SetFen, SetMoves, SetPromotions, init, update, view,
+  NextTurn, Set, SetFen, SetMoves, SetPromotions, ToggleVisibility, init, update,
+  view,
 }
 import gleam/dict
 import gleam/javascript/array.{type Array}
@@ -38,12 +39,24 @@ pub type PromotionMenuClickData {
 }
 
 pub type UiState {
-  UiState(mode: UiMode)
+  UiState(
+    mode: UiModeOption,
+    lobby_mode_settings: LobbyModeSettings,
+    game_mode_settings: GameModeSettings,
+  )
 }
 
-pub type UiMode {
-  LobbyMode
-  GameMode(
+pub type UiModeOption {
+  LobbyModeOption
+  GameModeOption
+}
+
+pub type LobbyModeSettings {
+  LobbyModeSettings(on_computer_game_confirmation: Option(fn() -> Nil))
+}
+
+pub type GameModeSettings {
+  GameModeSettings(
     promotion: Bool,
     promotion_on_click: Option(
       fn(PromotionMenuClickData, Position, Position) -> Nil,
@@ -54,11 +67,12 @@ pub type UiMode {
 }
 
 pub type UiMsg {
-  ChangeMode(UiMode)
+  ChangeMode(UiModeOption)
   ShowPromotion(from: Position, to: Position)
   CallOnClick(PromotionMenuOptions)
   SetOnClick(fn(PromotionMenuClickData, Position, Position) -> Nil)
   RequestGameWithComputer
+  SetRequestGameWithComputerConfirmation(fn() -> Nil)
 }
 
 @external(javascript, "./ffi.js", "console_log_js")
@@ -107,7 +121,7 @@ pub fn get_data_field_object_as_array_js(
 ) -> Array(Array(String))
 
 @external(javascript, "./ffi.js", "request_game_with_computer_js")
-pub fn request_game_with_computer_js() -> Nil
+pub fn request_game_with_computer_js(callback: fn() -> Nil) -> Nil
 
 pub fn main() {
   let socket = ws_init_js()
@@ -272,51 +286,97 @@ pub fn main() {
 
   ui_interface(dispatch(SetOnClick(after_promo_menu_click)))
 
+  let on_computer_game_confirmation = fn() {
+    // TODO: it might make more sense for the chessboard interface to be
+    // stored within the ui state
+
+    ui_interface(dispatch(ChangeMode(GameModeOption)))
+    interface(dispatch(ToggleVisibility))
+  }
+
+  ui_interface(
+    dispatch(SetRequestGameWithComputerConfirmation(
+      on_computer_game_confirmation,
+    )),
+  )
+
   Nil
 }
 
 pub fn ui_init(_) {
-  #(UiState(mode: LobbyMode), effect.none())
+  let game_mode_settings =
+    GameModeSettings(
+      promotion: False,
+      promotion_on_click: None,
+      from: None,
+      to: None,
+    )
+  let lobby_mode_settings = LobbyModeSettings(None)
+  #(
+    UiState(LobbyModeOption, lobby_mode_settings, game_mode_settings),
+    effect.none(),
+  )
 }
 
 pub fn ui_update(state: UiState, msg) {
   case msg {
     ChangeMode(mode) -> {
-      #(UiState(mode: mode), effect.none())
+      #(
+        UiState(
+          mode: mode,
+          lobby_mode_settings: state.lobby_mode_settings,
+          game_mode_settings: state.game_mode_settings,
+        ),
+        effect.none(),
+      )
     }
     ShowPromotion(from, to) -> {
       case state.mode {
-        GameMode(promotion, promotion_on_click, from, to) -> {
+        GameModeOption -> {
           #(
-            UiState(mode: GameMode(
-              promotion: True,
-              from: from,
-              to: to,
-              promotion_on_click: promotion_on_click,
-            )),
+            UiState(
+              mode: GameModeOption,
+              lobby_mode_settings: state.lobby_mode_settings,
+              game_mode_settings: GameModeSettings(
+                promotion: True,
+                from: Some(from),
+                to: Some(to),
+                promotion_on_click: state.game_mode_settings.promotion_on_click,
+              ),
+            ),
             effect.none(),
           )
         }
-        LobbyMode -> {
+        _ -> {
           #(state, effect.none())
         }
       }
     }
     CallOnClick(promo_menu_choice) -> {
       case state.mode {
-        GameMode(promotion, Some(promotion_on_click), Some(from), Some(to)) -> {
+        GameModeOption -> {
+          let assert GameModeSettings(
+            _promotion,
+            Some(promotion_on_click),
+            Some(from),
+            Some(to),
+          ) = state.game_mode_settings
           promotion_on_click(
             PromotionMenuClickData(promotion: promo_menu_choice),
             from,
             to,
           )
           #(
-            UiState(mode: GameMode(
-              promotion: False,
-              from: None,
-              to: None,
-              promotion_on_click: Some(promotion_on_click),
-            )),
+            UiState(
+              mode: state.mode,
+              lobby_mode_settings: state.lobby_mode_settings,
+              game_mode_settings: GameModeSettings(
+                promotion: False,
+                from: None,
+                to: None,
+                promotion_on_click: Some(promotion_on_click),
+              ),
+            ),
             effect.none(),
           )
         }
@@ -326,30 +386,48 @@ pub fn ui_update(state: UiState, msg) {
       }
     }
     SetOnClick(on_click) -> {
+      #(
+        UiState(
+          mode: state.mode,
+          lobby_mode_settings: state.lobby_mode_settings,
+          game_mode_settings: GameModeSettings(
+            promotion: state.game_mode_settings.promotion,
+            promotion_on_click: Some(on_click),
+            from: state.game_mode_settings.from,
+            to: state.game_mode_settings.to,
+          ),
+        ),
+        effect.none(),
+      )
+    }
+    RequestGameWithComputer -> {
       case state.mode {
-        GameMode(promotion, _, from, to) -> {
-          #(
-            UiState(mode: GameMode(
-              promotion: promotion,
-              promotion_on_click: Some(on_click),
-              from: from,
-              to: to,
-            )),
-            effect.none(),
-          )
+        LobbyModeOption -> {
+          let assert Some(on_computer_game_confirmation) =
+            state.lobby_mode_settings.on_computer_game_confirmation
+          request_game_with_computer_js(on_computer_game_confirmation)
+          #(state, effect.none())
         }
-        LobbyMode -> {
+        _ -> {
           #(state, effect.none())
         }
       }
     }
-    RequestGameWithComputer -> {
+    SetRequestGameWithComputerConfirmation(on_computer_game_confirmation) -> {
       case state.mode {
-        LobbyMode -> {
-          request_game_with_computer_js()
-          #(state, effect.none())
+        LobbyModeOption -> {
+          #(
+            UiState(
+              mode: state.mode,
+              lobby_mode_settings: LobbyModeSettings(Some(
+                on_computer_game_confirmation,
+              )),
+              game_mode_settings: state.game_mode_settings,
+            ),
+            effect.none(),
+          )
         }
-        GameMode(_, _, _, _) -> {
+        _ -> {
           #(state, effect.none())
         }
       }
@@ -359,23 +437,32 @@ pub fn ui_update(state: UiState, msg) {
 
 pub fn ui_view(state: UiState) {
   case state.mode {
-    GameMode(_, _, _, _) -> {
-      div([], [
-        html.button([event.on("click", fn(_) { Ok(CallOnClick(Queen)) })], [
-          text("Queen"),
-        ]),
-        html.button([event.on("click", fn(_) { Ok(CallOnClick(Rook)) })], [
-          text("Rook"),
-        ]),
-        html.button([event.on("click", fn(_) { Ok(CallOnClick(Knight)) })], [
-          text("Knight"),
-        ]),
-        html.button([event.on("click", fn(_) { Ok(CallOnClick(Bishop)) })], [
-          text("Bishop"),
-        ]),
-      ])
+    GameModeOption -> {
+      let show_promotion = state.game_mode_settings.promotion
+
+      case show_promotion {
+        True -> {
+          div([], [
+            html.button([event.on("click", fn(_) { Ok(CallOnClick(Queen)) })], [
+              text("Queen"),
+            ]),
+            html.button([event.on("click", fn(_) { Ok(CallOnClick(Rook)) })], [
+              text("Rook"),
+            ]),
+            html.button([event.on("click", fn(_) { Ok(CallOnClick(Knight)) })], [
+              text("Knight"),
+            ]),
+            html.button([event.on("click", fn(_) { Ok(CallOnClick(Bishop)) })], [
+              text("Bishop"),
+            ]),
+          ])
+        }
+        False -> {
+          div([], [])
+        }
+      }
     }
-    LobbyMode -> {
+    LobbyModeOption -> {
       div([], [
         html.button([event.on("click", fn(_) { Ok(RequestGameWithComputer) })], [
           text("PLAY WITH THE COMPUTER"),

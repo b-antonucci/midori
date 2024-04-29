@@ -89,11 +89,12 @@ export function ws_send_move_js(socket, message) {
   socket.send(JSON.stringify(message));
 }
 
-export function request_game_with_computer_js() {
+export function request_game_with_computer_js(callback) {
   let fetchRes = fetch("/request_game_with_computer");
         
   fetchRes.then(res =>
       res.json()).then(d => {
+          callback();
           console.log(d)
       })
 }
