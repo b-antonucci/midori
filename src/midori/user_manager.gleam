@@ -3,16 +3,12 @@ import gleam/erlang/process
 import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import ids/uuid
+import midori/game_id.{type GameId}
+import midori/user_id.{type UserId}
 import midori/user_manager_message.{
   type UserManagerMessage, AddGameToUser, AddUser, ConfirmUserExists,
   GetUserGame, RemoveUser,
 }
-
-pub type UserId =
-  String
-
-pub type GameId =
-  String
 
 pub type UserManagerState {
   UserManagerState(users: Dict(UserId, Option(GameId)))
