@@ -165,7 +165,7 @@ pub fn start_bot_server(
       handle_message,
     )
 
-  let assert fairy_stockfish_command =
+  let fairy_stockfish_command =
     Execve(["./fairy-stockfish-largeboard_x86-64-modern"])
   let options =
     glexec.new()

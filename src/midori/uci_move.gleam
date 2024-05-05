@@ -11,6 +11,6 @@ pub fn convert_move(move: String) -> UciMove {
       let move = from <> to
       move
     }
-    _ -> panic("Invalid move format")
+    _ -> panic as "Invalid move format"
   }
 }

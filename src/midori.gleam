@@ -141,11 +141,11 @@ pub type MyMessage {
 fn handle_ws_message(state: ConnectionState, conn, message) {
   case state {
     ConnectionState(
-        id,
-        _ping_server_subject,
-        game_manager_subject,
-        _ws_server_subject,
-      ) -> {
+      id,
+      _ping_server_subject,
+      game_manager_subject,
+      _ws_server_subject,
+    ) -> {
       case message {
         mist.Text("0") -> {
           // process.send(state.ping_server_subject, ping_server.Ping(conn))
