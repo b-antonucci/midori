@@ -147,7 +147,7 @@ pub fn main() {
                 destinations
               }
               _ -> {
-                panic("Invalid move set")
+                panic as "Invalid move set"
               }
             }
             let origin: Origin = from_string(origin)
@@ -167,7 +167,7 @@ pub fn main() {
                     )
                   }
                   _ -> {
-                    panic("Invalid destination")
+                    panic as "Invalid destination"
                   }
                 }
               })
