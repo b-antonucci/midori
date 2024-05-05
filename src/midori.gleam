@@ -17,9 +17,12 @@ import midori/ping_server.{type PingServerMessage}
 import midori/router
 import midori/uci_move.{convert_move}
 import midori/user_manager
+import midori/user_manager_message.{type UserManagerMessage, GetUserGame}
 import midori/web.{Context}
 import midori/ws_server
-import midori/ws_server_message.{type WebsocketServerMessage}
+import midori/ws_server_message.{
+  type WebsocketServerMessage, AddConnection, RemoveConnection,
+}
 import mist.{type Connection, type ResponseData}
 import wisp
 
@@ -29,6 +32,7 @@ type ConnectionState {
     ping_server_subject: Subject(PingServerMessage),
     game_manager_subject: Subject(GameManagerMessage),
     ws_server_subject: Subject(WebsocketServerMessage),
+    user_manager_subject: Subject(UserManagerMessage),
   )
   ConnectionErrorState
 }
@@ -73,7 +77,7 @@ pub fn main() {
         ["ws"] ->
           mist.websocket(
             request: req,
-            on_init: fn(_websocket) {
+            on_init: fn(websocket) {
               case mist.read_body(req, 1000) {
                 Ok(req_body) -> {
                   let assert Ok(encoded_user_id) =
@@ -88,7 +92,12 @@ pub fn main() {
                       ping_server_subject,
                       game_manager_subject,
                       ws_server_subject,
+                      user_manager_subject,
                     )
+                  process.send(
+                    ws_server_subject,
+                    AddConnection(user_id, websocket),
+                  )
                   #(state, Some(selector))
                 }
                 Error(_) -> {
@@ -96,14 +105,18 @@ pub fn main() {
                 }
               }
             },
-            on_close: fn(_state) {
+            on_close: fn(state) {
               // let assert Ok(_) =
               //   process.call(
               //     state.game_manager_subject,
               //     RemoveGame(_, state.id),
               //     1000,
               //   )
-              // process.send(state.ws_server_subject, RemoveConnection(state.id))
+              case state {
+                ConnectionState(id, _, _, _, _) ->
+                  process.send(ws_server_subject, RemoveConnection(id))
+                ConnectionErrorState -> Nil
+              }
               Nil
             },
             handler: handle_ws_message,
@@ -145,6 +158,7 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
       _ping_server_subject,
       game_manager_subject,
       _ws_server_subject,
+      user_manager_subject,
     ) -> {
       case message {
         mist.Text("0") -> {
@@ -154,13 +168,14 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
         mist.Text(ws_message) -> {
           let message_decoder =
             dynamic.decode1(ApplyMoveMessage, field("move", string))
-
           case json.decode(ws_message, message_decoder) {
             Ok(ApplyMoveMessage(move)) -> {
+              let assert Ok(Some(game_id)) =
+                process.call(user_manager_subject, GetUserGame(_, id), 1000)
               let game_manager_response =
                 process.call(
                   game_manager_subject,
-                  ApplyMove(_, id, convert_move(move)),
+                  ApplyMove(_, game_id, id, convert_move(move)),
                   1000,
                 )
               let update_game_message =

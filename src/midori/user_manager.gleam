@@ -1,18 +1,11 @@
 import gleam/dict.{type Dict}
-import gleam/erlang/process.{type Subject}
-import gleam/list
+import gleam/erlang/process
+import gleam/option.{type Option, None, Some}
 import gleam/otp/actor
 import ids/uuid
-
-pub type UserManagerMessage {
-  AddUser(reply_with: Subject(Result(String, String)))
-  RemoveUser(reply_with: Subject(Result(Nil, String)), id: String)
-  AddGameToUser(
-    reply_with: Subject(Result(Nil, String)),
-    user_id: String,
-    game_id: String,
-  )
-  ConfirmUserExists(reply_with: Subject(Result(Nil, String)), id: String)
+import midori/user_manager_message.{
+  type UserManagerMessage, AddGameToUser, AddUser, ConfirmUserExists,
+  GetUserGame, RemoveUser,
 }
 
 pub type UserId =
@@ -22,7 +15,7 @@ pub type GameId =
   String
 
 pub type UserManagerState {
-  UserManagerState(users: Dict(UserId, List(GameId)))
+  UserManagerState(users: Dict(UserId, Option(GameId)))
 }
 
 fn handle_message(
@@ -34,7 +27,7 @@ fn handle_message(
       case uuid.generate_v7() {
         Ok(id) -> {
           // let new_state = UserManagerState(users: [id, ..state.users])
-          let users = dict.insert(state.users, id, [])
+          let users = dict.insert(state.users, id, None)
           let new_state = UserManagerState(users: users)
           process.send(reply_with, Ok(id))
           actor.continue(new_state)
@@ -60,12 +53,27 @@ fn handle_message(
     }
     AddGameToUser(reply_with, user_id, game_id) -> {
       case dict.get(state.users, user_id) {
-        Ok(games) -> {
-          let new_games = list.append(games, [game_id])
+        Ok(_) -> {
           let new_state =
-            UserManagerState(users: dict.insert(state.users, user_id, new_games))
+            UserManagerState(users: dict.insert(
+              state.users,
+              user_id,
+              Some(game_id),
+            ))
           process.send(reply_with, Ok(Nil))
           actor.continue(new_state)
+        }
+        Error(_) -> {
+          process.send(reply_with, Error("User not found"))
+          actor.continue(state)
+        }
+      }
+    }
+    GetUserGame(reply_with, id) -> {
+      case dict.get(state.users, id) {
+        Ok(game) -> {
+          process.send(reply_with, Ok(game))
+          actor.continue(state)
         }
         Error(_) -> {
           process.send(reply_with, Error("User not found"))

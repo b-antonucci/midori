@@ -1,16 +1,15 @@
 import gleam/erlang/process.{type Subject}
-
 import gleam/otp/actor
 import mist.{type WebsocketConnection}
 
 import gleam/dict
-import midori/game_id.{type GameId}
+import midori/user_id.{type UserId}
 import midori/ws_server_message.{
   type WebsocketServerMessage, AddConnection, RemoveConnection, Send,
 }
 
 pub type WebsocketServerState {
-  WebsocketServerState(connections: dict.Dict(GameId, WebsocketConnection))
+  WebsocketServerState(connections: dict.Dict(UserId, WebsocketConnection))
 }
 
 fn handle_message(

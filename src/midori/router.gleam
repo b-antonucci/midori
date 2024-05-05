@@ -2,7 +2,7 @@ import gleam/erlang/process
 import gleam/json
 import gleam/string_builder
 import midori/game_manager_message.{NewGame}
-import midori/user_manager.{AddGameToUser, AddUser, ConfirmUserExists}
+import midori/user_manager_message.{AddGameToUser, AddUser, ConfirmUserExists}
 import midori/web.{type Context}
 import wisp.{type Request, type Response}
 

@@ -4,7 +4,7 @@ import midori/game_manager_message
 pub type BotServerMessage {
   NextMove
   // TODO: RequestBotMove should to be a synchronous message
-  RequestBotMove(gameid: String, fen: String)
+  RequestBotMove(gameid: String, user_id: String, fen: String)
   SendBotMove(move: String)
   SetOsPid(pid: Int)
   SetGameManagerSubject(

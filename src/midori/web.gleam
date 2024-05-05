@@ -1,6 +1,6 @@
 import gleam/erlang/process.{type Subject}
 import midori/game_manager_message.{type GameManagerMessage}
-import midori/user_manager.{type UserManagerMessage}
+import midori/user_manager_message.{type UserManagerMessage}
 
 import wisp
 

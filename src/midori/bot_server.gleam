@@ -10,6 +10,7 @@ import midori/bot_server_message.{
   SetGameManagerSubject, SetOsPid, SetSelfSubject,
 }
 import midori/game_manager_message.{type GameManagerMessage, ApplyAiMove}
+import midori/user_id.{type UserId}
 
 pub type GameId =
   String
@@ -18,7 +19,7 @@ pub type Fen =
   String
 
 pub type MoveRequestQueue =
-  queue.Queue(#(GameId, Fen))
+  queue.Queue(#(GameId, UserId, Fen))
 
 pub type BotServerState {
   BotServerState(
@@ -26,7 +27,7 @@ pub type BotServerState {
     game_server_subject: option.Option(Subject(GameManagerMessage)),
     ospid: option.Option(Int),
     move_request_queue: MoveRequestQueue,
-    current_request: option.Option(#(GameId, Fen)),
+    current_request: option.Option(#(GameId, UserId, Fen)),
   )
 }
 
@@ -40,7 +41,7 @@ fn handle_message(
         option.None -> {
           case queue.pop_front(state.move_request_queue) {
             Error(_) -> state
-            Ok(#(#(game_id, fen), new_move_request_queue)) -> {
+            Ok(#(#(game_id, user_id, fen), new_move_request_queue)) -> {
               let assert option.Some(ospid) = state.ospid
               let assert Ok(_) =
                 glexec.send(ospid, "position fen " <> fen <> "\n")
@@ -50,12 +51,12 @@ fn handle_message(
                 state.game_server_subject,
                 state.ospid,
                 new_move_request_queue,
-                option.Some(#(game_id, fen)),
+                option.Some(#(game_id, user_id, fen)),
               )
             }
           }
         }
-        option.Some(#(_game_id, fen)) -> {
+        option.Some(#(_game_id, _user_id, fen)) -> {
           let assert option.Some(ospid) = state.ospid
           let assert Ok(_) = glexec.send(ospid, "position fen " <> fen <> "\n")
           let assert Ok(_) = glexec.send(ospid, "go depth 1\n")
@@ -63,7 +64,7 @@ fn handle_message(
         }
       }
     }
-    RequestBotMove(gameid, fen) -> {
+    RequestBotMove(gameid, user_id, fen) -> {
       case
         queue.is_empty(state.move_request_queue)
         && state.current_request == option.None
@@ -75,7 +76,7 @@ fn handle_message(
               state.game_server_subject,
               state.ospid,
               state.move_request_queue,
-              option.Some(#(gameid, fen)),
+              option.Some(#(gameid, user_id, fen)),
             )
           let assert option.Some(ospid) = state.ospid
           let assert Ok(_) = glexec.send(ospid, "position fen " <> fen <> "\n")
@@ -84,7 +85,7 @@ fn handle_message(
         }
         False -> {
           let move_request_queue =
-            queue.push_back(state.move_request_queue, #(gameid, fen))
+            queue.push_back(state.move_request_queue, #(gameid, user_id, fen))
           let state =
             BotServerState(
               state.self_subject,
@@ -98,9 +99,9 @@ fn handle_message(
       }
     }
     SendBotMove(move) -> {
-      let assert option.Some(#(game_id, _fen)) = state.current_request
+      let assert option.Some(#(game_id, user_id, _fen)) = state.current_request
       let assert option.Some(game_manager_subject) = state.game_server_subject
-      process.send(game_manager_subject, ApplyAiMove(game_id, move))
+      process.send(game_manager_subject, ApplyAiMove(game_id, user_id, move))
       let state =
         BotServerState(
           state.self_subject,
@@ -177,7 +178,6 @@ pub fn start_bot_server(
           [_, move] -> {
             let assert Ok(move) =
               list.first(string.split(string.trim(move), " "))
-            // io.println("Sending move: " <> move)
             actor.send(actor, SendBotMove(move))
             Nil
           }

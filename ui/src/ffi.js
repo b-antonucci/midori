@@ -95,6 +95,12 @@ export function request_game_with_computer_js(callback) {
   fetchRes.then(res =>
       res.json()).then(d => {
           callback();
+          const nextURL = "/game/" + d.game_id;
+          const nextTitle = 'Computer Game';
+          const nextState = { additionalInformation: 'Updated the URL with JS' };
+
+          // This will create a new entry in the browser's history, without reloading
+          window.history.pushState(nextState, nextTitle, nextURL);
           console.log(d)
       })
 }

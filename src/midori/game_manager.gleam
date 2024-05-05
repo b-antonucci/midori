@@ -34,8 +34,8 @@ fn handle_message(
 ) -> actor.Next(GameManagerMessage, GameManagerState) {
   case message {
     Shutdown -> actor.Stop(process.Normal)
-    ApplyMove(client, id, move) -> {
-      let assert Ok(server) = dict.get(state.game_map, id)
+    ApplyMove(client, game_id, user_id, move) -> {
+      let assert Ok(server) = dict.get(state.game_map, game_id)
       let assert Ok(_) = game_server.apply_move_uci_string(server, move)
       let legal_moves = game_server.all_legal_moves(server)
       let length = list.length(legal_moves)
@@ -50,7 +50,7 @@ fn handle_message(
 
           process.send(
             state.bot_server_pid,
-            RequestBotMove(gameid: id, fen: fen),
+            RequestBotMove(gameid: game_id, user_id: user_id, fen: fen),
           )
 
           let response = ConfirmMove(move)
@@ -59,8 +59,8 @@ fn handle_message(
         }
       }
     }
-    ApplyAiMove(id, move) -> {
-      let assert Ok(server) = dict.get(state.game_map, id)
+    ApplyAiMove(game_id, user_id, move) -> {
+      let assert Ok(server) = dict.get(state.game_map, game_id)
       let assert Ok(_) = game_server.apply_move_uci_string(server, move)
       let fen = game_server.get_fen(server)
       // TODO: There should be a function called all_legal_moves_aggregated or something
@@ -109,7 +109,7 @@ fn handle_message(
       let ws_json_message =
         update_game_message_to_json(BotMove(moves: formatted_moves, fen: fen))
 
-      process.send(state.ws_server_subject, Send(id, ws_json_message))
+      process.send(state.ws_server_subject, Send(user_id, ws_json_message))
 
       actor.continue(state)
     }
