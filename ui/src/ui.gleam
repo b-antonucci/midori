@@ -52,7 +52,7 @@ pub type UiModeOption {
 }
 
 pub type LobbyModeSettings {
-  LobbyModeSettings(on_computer_game_confirmation: Option(fn() -> Nil))
+  LobbyModeSettings(on_computer_game_confirmation: Option(fn(String) -> Nil))
 }
 
 pub type GameModeSettings {
@@ -72,7 +72,7 @@ pub type UiMsg {
   CallOnClick(PromotionMenuOptions)
   SetOnClick(fn(PromotionMenuClickData, Position, Position) -> Nil)
   RequestGameWithComputer
-  SetRequestGameWithComputerConfirmation(fn() -> Nil)
+  SetRequestGameWithComputerConfirmation(fn(String) -> Nil)
 }
 
 @external(javascript, "./ffi.js", "console_log_js")
@@ -121,7 +121,7 @@ pub fn get_data_field_object_as_array_js(
 ) -> Array(Array(String))
 
 @external(javascript, "./ffi.js", "request_game_with_computer_js")
-pub fn request_game_with_computer_js(callback: fn() -> Nil) -> Nil
+pub fn request_game_with_computer_js(callback: fn(String) -> Nil) -> Nil
 
 pub fn main() {
   let socket = ws_init_js()
@@ -286,9 +286,10 @@ pub fn main() {
 
   ui_interface(dispatch(SetOnClick(after_promo_menu_click)))
 
-  let on_computer_game_confirmation = fn() {
+  let on_computer_game_confirmation = fn(fen: String) {
     // TODO: it might make more sense for the chessboard interface to be
     // stored within the ui state
+    alert_js_string(fen)
 
     ui_interface(dispatch(ChangeMode(GameModeOption)))
     interface(dispatch(ToggleVisibility))

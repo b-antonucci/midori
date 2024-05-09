@@ -12,8 +12,8 @@ import midori/client_ws_message.{
   update_game_message_to_json,
 }
 import midori/game_manager_message.{
-  type GameManagerMessage, ApplyAiMove, ApplyMove, ConfirmMove, NewGame,
-  RemoveGame, Shutdown,
+  type GameInfo, type GameManagerMessage, ApplyAiMove, ApplyMove, ConfirmMove,
+  GameInfo, GetGameInfo, NewGame, RemoveGame, Shutdown,
 }
 import midori/ws_server_message.{type WebsocketServerMessage, Send}
 import move.{Normal}
@@ -139,6 +139,12 @@ fn handle_message(
         state.bot_server_pid,
         state.ws_server_subject,
       ))
+    }
+    GetGameInfo(client, id) -> {
+      let assert Ok(server) = dict.get(state.game_map, id)
+      let fen = game_server.get_fen(server)
+      process.send(client, Ok(GameInfo(fen: fen)))
+      actor.continue(state)
     }
   }
 }

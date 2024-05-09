@@ -94,7 +94,8 @@ export function request_game_with_computer_js(callback) {
         
   fetchRes.then(res =>
       res.json()).then(d => {
-          callback();
+          const fen = d.fen;
+          callback(fen);
           const nextURL = "/game/" + d.game_id;
           const nextTitle = 'Computer Game';
           const nextState = { additionalInformation: 'Updated the URL with JS' };
