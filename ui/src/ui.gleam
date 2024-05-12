@@ -289,10 +289,10 @@ pub fn main() {
   let on_computer_game_confirmation = fn(fen: String) {
     // TODO: it might make more sense for the chessboard interface to be
     // stored within the ui state
-    alert_js_string(fen)
 
     ui_interface(dispatch(ChangeMode(GameModeOption)))
     interface(dispatch(ToggleVisibility))
+    interface(dispatch(SetFen(fen)))
   }
 
   ui_interface(
