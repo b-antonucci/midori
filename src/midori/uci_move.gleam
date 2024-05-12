@@ -5,12 +5,12 @@ pub type UciMove =
 
 // we receive a string in the following format: "e2e4"
 // we need to convert it to a UciMove
-pub fn convert_move(move: String) -> UciMove {
+pub fn convert_move(move: String) -> Result(UciMove, _) {
   case string.split(move, "-") {
     [from, to] -> {
       let move = from <> to
-      move
+      Ok(move)
     }
-    _ -> panic as "Invalid move format"
+    _ -> Error("Invalid move format")
   }
 }

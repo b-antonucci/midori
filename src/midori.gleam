@@ -8,6 +8,7 @@ import gleam/http/response.{type Response}
 import gleam/json
 import gleam/option.{Some}
 import gleam/otp/actor
+import gleam/result
 import midori/bot_server
 import midori/bot_server_message.{SetGameManagerSubject}
 import midori/client_ws_message.{ConfirmMove, update_game_message_to_json}
@@ -80,25 +81,33 @@ pub fn main() {
             on_init: fn(websocket) {
               case mist.read_body(req, 1000) {
                 Ok(req_body) -> {
-                  let assert Ok(encoded_user_id) =
+                  let encoded_user_id =
                     dict.get(dict.from_list(get_cookies(req_body)), "user_id")
-                  let assert Ok(user_id_bit_array) =
-                    base64_decode(encoded_user_id)
-                  let assert Ok(user_id) =
-                    bit_array.to_string(user_id_bit_array)
-                  let state =
-                    ConnectionState(
-                      user_id,
-                      ping_server_subject,
-                      game_manager_subject,
-                      ws_server_subject,
-                      user_manager_subject,
-                    )
-                  process.send(
-                    ws_server_subject,
-                    AddConnection(user_id, websocket),
-                  )
-                  #(state, Some(selector))
+                  let user_id_result =
+                    result.map(encoded_user_id, base64_decode)
+                    |> result.flatten
+                    |> result.map(bit_array.to_string)
+                    |> result.flatten
+                  case user_id_result {
+                    Ok(user_id) -> {
+                      let state =
+                        ConnectionState(
+                          user_id,
+                          ping_server_subject,
+                          game_manager_subject,
+                          ws_server_subject,
+                          user_manager_subject,
+                        )
+                      process.send(
+                        ws_server_subject,
+                        AddConnection(user_id, websocket),
+                      )
+                      #(state, Some(selector))
+                    }
+                    Error(_) -> {
+                      #(ConnectionErrorState, Some(selector))
+                    }
+                  }
                 }
                 Error(_) -> {
                   #(ConnectionErrorState, Some(selector))
@@ -106,12 +115,6 @@ pub fn main() {
               }
             },
             on_close: fn(state) {
-              // let assert Ok(_) =
-              //   process.call(
-              //     state.game_manager_subject,
-              //     RemoveGame(_, state.id),
-              //     1000,
-              //   )
               case state {
                 ConnectionState(id, _, _, _, _) ->
                   process.send(ws_server_subject, RemoveConnection(id))
@@ -170,21 +173,35 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
             dynamic.decode1(ApplyMoveMessage, field("move", string))
           case json.decode(ws_message, message_decoder) {
             Ok(ApplyMoveMessage(move)) -> {
-              let assert Ok(Some(game_id)) =
+              let some_game_id_result =
                 process.call(user_manager_subject, GetUserGame(_, id), 1000)
-              let game_manager_response =
-                process.call(
-                  game_manager_subject,
-                  ApplyMove(_, game_id, id, convert_move(move)),
-                  1000,
-                )
-              let update_game_message =
-                ConfirmMove(move: game_manager_response.move)
-              let json = update_game_message_to_json(update_game_message)
+              let uci_move_result = convert_move(move)
+              case some_game_id_result, uci_move_result {
+                Ok(Some(game_id)), Ok(uci_move) -> {
+                  let game_manager_response_result =
+                    process.call(
+                      game_manager_subject,
+                      ApplyMove(_, game_id, id, uci_move),
+                      1000,
+                    )
 
-              let assert Ok(_) = mist.send_text_frame(conn, json)
+                  case game_manager_response_result {
+                    Ok(game_manager_response) -> {
+                      let update_game_message =
+                        ConfirmMove(move: game_manager_response.move)
+                      let json =
+                        update_game_message_to_json(update_game_message)
 
-              actor.continue(state)
+                      case mist.send_text_frame(conn, json) {
+                        Ok(_) -> actor.continue(state)
+                        Error(_) -> actor.continue(state)
+                      }
+                    }
+                    Error(_) -> actor.continue(state)
+                  }
+                }
+                _, _ -> actor.continue(state)
+              }
             }
             Error(_) -> {
               actor.continue(state)

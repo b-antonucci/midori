@@ -5,6 +5,7 @@ import gleam/erlang/process.{type Subject}
 import gleam/list
 import gleam/option.{Some}
 import gleam/otp/actor
+import gleam/result
 import ids/uuid
 import midori/bot_server_message.{type BotServerMessage, RequestBotMove}
 import midori/client_ws_message.{
@@ -35,26 +36,41 @@ fn handle_message(
   case message {
     Shutdown -> actor.Stop(process.Normal)
     ApplyMove(client, game_id, user_id, move) -> {
-      let assert Ok(server) = dict.get(state.game_map, game_id)
-      let assert Ok(_) = game_server.apply_move_uci_string(server, move)
-      let legal_moves = game_server.all_legal_moves(server)
-      let length = list.length(legal_moves)
-      case length {
-        0 -> {
-          let response = ConfirmMove(move)
-          process.send(client, response)
-          actor.continue(state)
+      let server_result = dict.get(state.game_map, game_id)
+      case server_result {
+        Ok(server) -> {
+          case game_server.apply_move_uci_string(server, move) {
+            Ok(_) -> {
+              let legal_moves = game_server.all_legal_moves(server)
+              let length = list.length(legal_moves)
+              case length {
+                0 -> {
+                  let response = ConfirmMove(move)
+                  process.send(client, Ok(response))
+                  actor.continue(state)
+                }
+                _ -> {
+                  let fen = game_server.get_fen(server)
+
+                  process.send(
+                    state.bot_server_pid,
+                    RequestBotMove(gameid: game_id, user_id: user_id, fen: fen),
+                  )
+
+                  let response = ConfirmMove(move)
+                  process.send(client, Ok(response))
+                  actor.continue(state)
+                }
+              }
+            }
+            Error(_) -> {
+              process.send(client, Error("Invalid move"))
+              actor.continue(state)
+            }
+          }
         }
-        _ -> {
-          let fen = game_server.get_fen(server)
-
-          process.send(
-            state.bot_server_pid,
-            RequestBotMove(gameid: game_id, user_id: user_id, fen: fen),
-          )
-
-          let response = ConfirmMove(move)
-          process.send(client, response)
+        Error(_) -> {
+          process.send(client, Error("Game not found"))
           actor.continue(state)
         }
       }

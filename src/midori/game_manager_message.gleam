@@ -4,7 +4,7 @@ import midori/uci_move.{type UciMove}
 pub type GameManagerMessage {
   Shutdown
   ApplyMove(
-    reply_with: Subject(ApplyMoveResult),
+    reply_with: Subject(Result(ApplyMoveResult, String)),
     game_id: String,
     user_id: String,
     move: UciMove,
