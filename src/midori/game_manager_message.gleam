@@ -23,5 +23,5 @@ pub type ApplyMoveResult {
 }
 
 pub type GameInfo {
-  GameInfo(fen: String, status: Status)
+  GameInfo(fen: String, status: Status, moves: List(UciMove))
 }

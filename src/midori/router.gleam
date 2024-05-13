@@ -61,12 +61,12 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
                 Ok(game_info) -> {
                   case game_info.status {
                     status.InProgress(_, _) -> {
-                      let fen = game_info.fen
                       wisp.json_response(
                         json.to_string_builder(
                           json.object([
                             #("game_id", json.string(game_id)),
-                            #("fen", json.string(fen)),
+                            #("fen", json.string(game_info.fen)),
+                            #("moves", json.array(game_info.moves, json.string)),
                           ]),
                         ),
                         200,
@@ -105,7 +105,6 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
                                     )
                                   case get_game_info_result {
                                     Ok(game_info) -> {
-                                      let fen = game_info.fen
                                       wisp.json_response(
                                         json.to_string_builder(
                                           json.object([
@@ -113,7 +112,14 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
                                               "game_id",
                                               json.string(new_game_id),
                                             ),
-                                            #("fen", json.string(fen)),
+                                            #("fen", json.string(game_info.fen)),
+                                            #(
+                                              "moves",
+                                              json.array(
+                                                game_info.moves,
+                                                json.string,
+                                              ),
+                                            ),
                                           ]),
                                         ),
                                         200,
