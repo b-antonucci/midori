@@ -2,11 +2,12 @@ import gleam/erlang/process
 import gleam/json
 import gleam/option.{None, Some}
 import gleam/string_builder
-import midori/game_manager_message.{GetGameInfo, NewGame}
+import midori/game_manager_message.{GetGameInfo, NewGame, RemoveGame}
 import midori/user_manager_message.{
   AddGameToUser, AddUser, ConfirmUserExists, GetUserGame,
 }
 import midori/web.{type Context}
+import status
 import wisp.{type Request, type Response}
 
 const html = "
@@ -39,6 +40,7 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
   use req <- web.middleware(req, ctx)
   case wisp.path_segments(req) {
     ["request_game_with_computer"] -> {
+      // TODO: need to clean this up using result and error handling functions
       case wisp.get_cookie(req, "user_id", wisp.PlainText) {
         Ok(user_id) -> {
           let get_user_game_result =
@@ -57,16 +59,99 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
                 )
               case get_game_info_result {
                 Ok(game_info) -> {
-                  let fen = game_info.fen
-                  wisp.json_response(
-                    json.to_string_builder(
-                      json.object([
-                        #("game_id", json.string(game_id)),
-                        #("fen", json.string(fen)),
-                      ]),
-                    ),
-                    200,
-                  )
+                  case game_info.status {
+                    status.InProgress(_, _) -> {
+                      let fen = game_info.fen
+                      wisp.json_response(
+                        json.to_string_builder(
+                          json.object([
+                            #("game_id", json.string(game_id)),
+                            #("fen", json.string(fen)),
+                          ]),
+                        ),
+                        200,
+                      )
+                    }
+                    _ -> {
+                      case
+                        process.call(
+                          ctx.game_manager_subject,
+                          RemoveGame(_, game_id),
+                          1000,
+                        )
+                      {
+                        Ok(_) -> {
+                          case
+                            process.call(
+                              ctx.game_manager_subject,
+                              NewGame,
+                              1000,
+                            )
+                          {
+                            Ok(new_game_id) -> {
+                              case
+                                process.call(
+                                  ctx.user_manager_subject,
+                                  AddGameToUser(_, user_id, new_game_id),
+                                  1000,
+                                )
+                              {
+                                Ok(_) -> {
+                                  let get_game_info_result =
+                                    process.call(
+                                      ctx.game_manager_subject,
+                                      GetGameInfo(_, new_game_id),
+                                      1000,
+                                    )
+                                  case get_game_info_result {
+                                    Ok(game_info) -> {
+                                      let fen = game_info.fen
+                                      wisp.json_response(
+                                        json.to_string_builder(
+                                          json.object([
+                                            #(
+                                              "game_id",
+                                              json.string(new_game_id),
+                                            ),
+                                            #("fen", json.string(fen)),
+                                          ]),
+                                        ),
+                                        200,
+                                      )
+                                    }
+                                    Error(_msg) -> {
+                                      wisp.html_response(
+                                        string_builder.from_string("Error"),
+                                        500,
+                                      )
+                                    }
+                                  }
+                                }
+                                Error(_msg) -> {
+                                  wisp.html_response(
+                                    string_builder.from_string("Error"),
+                                    500,
+                                  )
+                                }
+                              }
+                            }
+                            Error(_msg) -> {
+                              wisp.html_response(
+                                string_builder.from_string("Error"),
+                                500,
+                              )
+                            }
+                          }
+                        }
+                        Error(_msg) -> {
+                          wisp.html_response(
+                            string_builder.from_string("Error"),
+                            500,
+                          )
+                        }
+                      }
+                    }
+                  }
                 }
                 Error(_msg) -> {
                   wisp.html_response(string_builder.from_string("Error"), 500)

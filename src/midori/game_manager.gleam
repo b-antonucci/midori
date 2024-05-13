@@ -3,9 +3,8 @@ import gleam/dict.{type Dict}
 import gleam/dynamic.{list}
 import gleam/erlang/process.{type Subject}
 import gleam/list
-import gleam/option.{Some}
+import gleam/option.{None, Some}
 import gleam/otp/actor
-import gleam/result
 import ids/uuid
 import midori/bot_server_message.{type BotServerMessage, RequestBotMove}
 import midori/client_ws_message.{
@@ -185,8 +184,17 @@ fn handle_message(
     GetGameInfo(client, id) -> {
       let assert Ok(server) = dict.get(state.game_map, id)
       let fen = game_server.get_fen(server)
-      process.send(client, Ok(GameInfo(fen: fen)))
-      actor.continue(state)
+      let status_option = game_server.get_status(server)
+      case status_option {
+        Some(status) -> {
+          process.send(client, Ok(GameInfo(fen: fen, status: status)))
+          actor.continue(state)
+        }
+        None -> {
+          process.send(client, Error("Game not found"))
+          actor.continue(state)
+        }
+      }
     }
   }
 }

@@ -1,5 +1,6 @@
 import gleam/erlang/process.{type Subject}
 import midori/uci_move.{type UciMove}
+import status.{type Status}
 
 pub type GameManagerMessage {
   Shutdown
@@ -22,5 +23,5 @@ pub type ApplyMoveResult {
 }
 
 pub type GameInfo {
-  GameInfo(fen: String)
+  GameInfo(fen: String, status: Status)
 }
