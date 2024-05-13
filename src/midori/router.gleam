@@ -74,34 +74,42 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
               }
             }
             Ok(None) -> {
-              let game_id =
-                process.call(ctx.game_manager_subject, NewGame, 1000)
-              case
-                process.call(
-                  ctx.user_manager_subject,
-                  AddGameToUser(_, user_id, game_id),
-                  1000,
-                )
-              {
-                Ok(_) -> {
-                  let get_game_info_result =
+              case process.call(ctx.game_manager_subject, NewGame, 1000) {
+                Ok(game_id) -> {
+                  case
                     process.call(
-                      ctx.game_manager_subject,
-                      GetGameInfo(_, game_id),
+                      ctx.user_manager_subject,
+                      AddGameToUser(_, user_id, game_id),
                       1000,
                     )
-                  case get_game_info_result {
-                    Ok(game_info) -> {
-                      let fen = game_info.fen
-                      wisp.json_response(
-                        json.to_string_builder(
-                          json.object([
-                            #("game_id", json.string(game_id)),
-                            #("fen", json.string(fen)),
-                          ]),
-                        ),
-                        200,
-                      )
+                  {
+                    Ok(_) -> {
+                      let get_game_info_result =
+                        process.call(
+                          ctx.game_manager_subject,
+                          GetGameInfo(_, game_id),
+                          1000,
+                        )
+                      case get_game_info_result {
+                        Ok(game_info) -> {
+                          let fen = game_info.fen
+                          wisp.json_response(
+                            json.to_string_builder(
+                              json.object([
+                                #("game_id", json.string(game_id)),
+                                #("fen", json.string(fen)),
+                              ]),
+                            ),
+                            200,
+                          )
+                        }
+                        Error(_msg) -> {
+                          wisp.html_response(
+                            string_builder.from_string("Error"),
+                            500,
+                          )
+                        }
+                      }
                     }
                     Error(_msg) -> {
                       wisp.html_response(

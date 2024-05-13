@@ -130,20 +130,46 @@ fn handle_message(
       actor.continue(state)
     }
     NewGame(client) -> {
-      let assert Ok(server) = game_server.new_server()
-      let assert Ok(_) =
-        new_game_from_fen(
-          server,
-          "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
-        )
-      let assert Ok(game_id) = uuid.generate_v7()
-      let game_map = dict.insert(state.game_map, game_id, server)
-      process.send(client, game_id)
-      actor.continue(GameManagerState(
-        game_map,
-        state.bot_server_pid,
-        state.ws_server_subject,
-      ))
+      let server = game_server.new_server()
+      case server {
+        Ok(server) -> {
+          case
+            new_game_from_fen(
+              server,
+              "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+            )
+          {
+            Ok(_) -> {
+              let game_id_result = uuid.generate_v7()
+              case game_id_result {
+                Ok(game_id) -> {
+                  let game_map = dict.insert(state.game_map, game_id, server)
+                  process.send(client, game_id_result)
+                  actor.continue(GameManagerState(
+                    game_map,
+                    state.bot_server_pid,
+                    state.ws_server_subject,
+                  ))
+                }
+                Error(_) -> {
+                  shutdown(server)
+                  process.send(client, Error("Failed to generate game id"))
+                  actor.continue(state)
+                }
+              }
+            }
+            Error(_) -> {
+              shutdown(server)
+              process.send(client, Error("Failed to create game"))
+              actor.continue(state)
+            }
+          }
+        }
+        Error(_) -> {
+          process.send(client, Error("Failed to create game"))
+          actor.continue(state)
+        }
+      }
     }
     RemoveGame(client, id) -> {
       let assert Ok(server) = dict.get(state.game_map, id)

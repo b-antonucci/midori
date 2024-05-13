@@ -12,7 +12,7 @@ pub type GameManagerMessage {
   // TODO: This should be sync call, NOTICE: many/all of the messages should be sync
   // if only to get confirmation that the message was received
   ApplyAiMove(game_id: String, user_id: String, move: String)
-  NewGame(reply_with: Subject(String))
+  NewGame(reply_with: Subject(Result(String, String)))
   RemoveGame(reply_with: Subject(Result(Nil, Nil)), id: String)
   GetGameInfo(reply_with: Subject(Result(GameInfo, String)), id: String)
 }
