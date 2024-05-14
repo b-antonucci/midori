@@ -6,7 +6,6 @@ import gleam/erlang/process.{type Subject}
 import gleam/http/request.{type Request, Request, get_cookies}
 import gleam/http/response.{type Response}
 import gleam/json
-import gleam/list
 import gleam/option.{Some}
 import gleam/otp/actor
 import gleam/result
@@ -26,10 +25,6 @@ import midori/ws_server_message.{
   type WebsocketServerMessage, AddConnection, RemoveConnection,
 }
 import mist.{type Connection, type ResponseData}
-import move.{type Move, Normal}
-import piece.{Bishop, Knight, Queen, Rook}
-
-import position
 import wisp
 
 type ConnectionState {

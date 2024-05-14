@@ -1,18 +1,15 @@
 import gleam/erlang/process
-import gleam/json.{array, object, string as json_string, to_string}
+import gleam/json.{array, object, string as json_string}
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/string_builder
-import midori/client_ws_message.{
-  type ClientFormatMoveList, ClientFormatMoveList, ConfirmMove,
-  update_game_message_to_json,
-}
+import midori/client_ws_message.{type ClientFormatMoveList, ClientFormatMoveList}
 import midori/game_manager_message.{GetGameInfo, NewGame, RemoveGame}
 import midori/user_manager_message.{
   AddGameToUser, AddUser, ConfirmUserExists, GetUserGame,
 }
 import midori/web.{type Context}
-import move.{type Move, Normal}
+import move.{Normal}
 import piece.{Bishop, Knight, Queen, Rook}
 import position
 import status
