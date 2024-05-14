@@ -186,10 +186,6 @@ fn handle_message(
       let fen = game_server.get_fen(server)
       let status_option = game_server.get_status(server)
       let moves = game_server.all_legal_moves(server)
-      let moves =
-        list.map(moves, fn(move) {
-          position.to_string(move.to) <> position.to_string(move.from)
-        })
       case status_option {
         Some(status) -> {
           process.send(

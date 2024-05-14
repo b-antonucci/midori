@@ -1,12 +1,20 @@
 import gleam/erlang/process
-import gleam/json
+import gleam/json.{array, object, string as json_string, to_string}
+import gleam/list
 import gleam/option.{None, Some}
 import gleam/string_builder
+import midori/client_ws_message.{
+  type ClientFormatMoveList, ClientFormatMoveList, ConfirmMove,
+  update_game_message_to_json,
+}
 import midori/game_manager_message.{GetGameInfo, NewGame, RemoveGame}
 import midori/user_manager_message.{
   AddGameToUser, AddUser, ConfirmUserExists, GetUserGame,
 }
 import midori/web.{type Context}
+import move.{type Move, Normal}
+import piece.{Bishop, Knight, Queen, Rook}
+import position
 import status
 import wisp.{type Request, type Response}
 
@@ -61,12 +69,18 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
                 Ok(game_info) -> {
                   case game_info.status {
                     status.InProgress(_, _) -> {
+                      let moves = format_move(game_info.moves)
+                      let moves = moves.moves
+                      let moves_with_json_dests =
+                        list.map(moves, fn(move) {
+                          #(move.0, array(move.1, of: json_string))
+                        })
                       wisp.json_response(
                         json.to_string_builder(
                           json.object([
                             #("game_id", json.string(game_id)),
                             #("fen", json.string(game_info.fen)),
-                            #("moves", json.array(game_info.moves, json.string)),
+                            #("moves", object(moves_with_json_dests)),
                           ]),
                         ),
                         200,
@@ -105,6 +119,15 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
                                     )
                                   case get_game_info_result {
                                     Ok(game_info) -> {
+                                      let moves = format_move(game_info.moves)
+                                      let moves = moves.moves
+                                      let moves_with_json_dests =
+                                        list.map(moves, fn(move) {
+                                          #(
+                                            move.0,
+                                            array(move.1, of: json_string),
+                                          )
+                                        })
                                       wisp.json_response(
                                         json.to_string_builder(
                                           json.object([
@@ -115,10 +138,7 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
                                             #("fen", json.string(game_info.fen)),
                                             #(
                                               "moves",
-                                              json.array(
-                                                game_info.moves,
-                                                json.string,
-                                              ),
+                                              object(moves_with_json_dests),
                                             ),
                                           ]),
                                         ),
@@ -184,11 +204,18 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
                       case get_game_info_result {
                         Ok(game_info) -> {
                           let fen = game_info.fen
+                          let moves = format_move(game_info.moves)
+                          let moves = moves.moves
+                          let moves_with_json_dests =
+                            list.map(moves, fn(move) {
+                              #(move.0, array(move.1, of: json_string))
+                            })
                           wisp.json_response(
                             json.to_string_builder(
                               json.object([
                                 #("game_id", json.string(game_id)),
                                 #("fen", json.string(fen)),
+                                #("moves", object(moves_with_json_dests)),
                               ]),
                             ),
                             200,
@@ -280,4 +307,38 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
       }
     }
   }
+}
+
+pub fn format_move(moves: List(move.Move)) -> ClientFormatMoveList {
+  let formatted_moves =
+    list.fold(moves, ClientFormatMoveList(moves: []), fn(acc, move) {
+      let origin = move.from
+      let origin_string = position.to_string(origin)
+      let promo = case move {
+        Normal(_, _, Some(promo)) ->
+          case promo.kind {
+            Queen -> "q"
+            Rook -> "r"
+            Knight -> "n"
+            Bishop -> "b"
+            _ -> ""
+          }
+        _ -> ""
+      }
+      case list.find(acc.moves, fn(move) { move.0 == origin_string }) {
+        Error(_) -> {
+          let new_move = #(origin_string, [position.to_string(move.to) <> promo])
+          ClientFormatMoveList(moves: [new_move, ..acc.moves])
+        }
+        Ok(#(_, destinations)) -> {
+          let new_destinations =
+            list.append(destinations, [position.to_string(move.to) <> promo])
+          let new_move = #(origin_string, new_destinations)
+          let new_moves =
+            list.filter(acc.moves, fn(move) { move.0 != origin_string })
+          ClientFormatMoveList(moves: [new_move, ..new_moves])
+        }
+      }
+    })
+  formatted_moves
 }
