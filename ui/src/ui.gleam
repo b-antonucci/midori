@@ -1,5 +1,4 @@
 import config.{type Config, Config, Moveable}
-import file.{A, B, C, D, E, F, G, H}
 import gchessboard.{
   NextTurn, Set, SetFen, SetMoves, SetPromotions, ToggleVisibility, init, update,
   view,
@@ -14,7 +13,6 @@ import lustre/effect
 import lustre/element/html.{div, text}
 import lustre/event
 import position.{type Position, Position, from_string}
-import rank.{Four, One, Three, Two}
 import types.{type MoveData, type Origin, White}
 
 pub type Websocket
