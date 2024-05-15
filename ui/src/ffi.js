@@ -116,3 +116,7 @@ export function request_game_with_computer_js(callback) {
 export function console_log_js(message) {
   console.log(message);
 }
+
+export function url_pathname_js() {
+  return window.location.pathname;
+}

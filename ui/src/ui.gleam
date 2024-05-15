@@ -40,15 +40,15 @@ pub type PromotionMenuClickData {
 
 pub type UiState {
   UiState(
-    mode: UiModeOption,
+    mode: UiMode,
     lobby_mode_settings: LobbyModeSettings,
     game_mode_settings: GameModeSettings,
   )
 }
 
-pub type UiModeOption {
-  LobbyModeOption
-  GameModeOption
+pub type UiMode {
+  LobbyMode
+  GameMode
 }
 
 pub type LobbyModeSettings {
@@ -71,7 +71,7 @@ pub type GameModeSettings {
 }
 
 pub type UiMsg {
-  ChangeMode(UiModeOption)
+  ChangeMode(UiMode)
   ShowPromotion(from: Position, to: Position)
   CallOnClick(PromotionMenuOptions)
   SetOnClick(fn(PromotionMenuClickData, Position, Position) -> Nil)
@@ -131,11 +131,25 @@ pub fn request_game_with_computer_js(
   callback: fn(String, Array(Array(String))) -> Nil,
 ) -> Nil
 
+@external(javascript, "./ffi.js", "url_pathname_js")
+pub fn url_pathname_js() -> String
+
 pub fn main() {
   let socket = ws_init_js()
   let app = application(init, update, view)
-  let ui_app = application(ui_init, ui_update, ui_view)
+  let url_pathname = url_pathname_js()
+
   let assert Ok(interface) = lustre.start(app, "[gchessboard-lustre-app]", Nil)
+  let ui_mode = case url_pathname {
+    "/game/" <> _game_id -> {
+      interface(dispatch(ToggleVisibility))
+      GameMode
+    }
+    _ -> {
+      LobbyMode
+    }
+  }
+  let ui_app = application(ui_init(_, ui_mode), ui_update, ui_view)
   let assert Ok(ui_interface) = lustre.start(ui_app, "[ui-lustre-app]", Nil)
   let on_message = fn(message) {
     case get_data_as_string_js(message) {
@@ -297,7 +311,7 @@ pub fn main() {
         )
       })
 
-    ui_interface(dispatch(ChangeMode(GameModeOption)))
+    ui_interface(dispatch(ChangeMode(GameMode)))
     interface(dispatch(ToggleVisibility))
     interface(dispatch(SetFen(fen)))
     interface(dispatch(SetMoves(moves)))
@@ -313,7 +327,7 @@ pub fn main() {
   Nil
 }
 
-pub fn ui_init(_) {
+pub fn ui_init(_, ui_mode: UiMode) {
   let game_mode_settings =
     GameModeSettings(
       promotion: False,
@@ -322,10 +336,7 @@ pub fn ui_init(_) {
       to: None,
     )
   let lobby_mode_settings = LobbyModeSettings(None)
-  #(
-    UiState(LobbyModeOption, lobby_mode_settings, game_mode_settings),
-    effect.none(),
-  )
+  #(UiState(ui_mode, lobby_mode_settings, game_mode_settings), effect.none())
 }
 
 pub fn ui_update(state: UiState, msg) {
@@ -342,10 +353,10 @@ pub fn ui_update(state: UiState, msg) {
     }
     ShowPromotion(from, to) -> {
       case state.mode {
-        GameModeOption -> {
+        GameMode -> {
           #(
             UiState(
-              mode: GameModeOption,
+              mode: GameMode,
               lobby_mode_settings: state.lobby_mode_settings,
               game_mode_settings: GameModeSettings(
                 promotion: True,
@@ -364,7 +375,7 @@ pub fn ui_update(state: UiState, msg) {
     }
     CallOnClick(promo_menu_choice) -> {
       case state.mode {
-        GameModeOption -> {
+        GameMode -> {
           let assert GameModeSettings(
             _promotion,
             Some(promotion_on_click),
@@ -412,7 +423,7 @@ pub fn ui_update(state: UiState, msg) {
     }
     RequestGameWithComputer -> {
       case state.mode {
-        LobbyModeOption -> {
+        LobbyMode -> {
           let assert Some(on_computer_game_confirmation) =
             state.lobby_mode_settings.on_computer_game_confirmation
           request_game_with_computer_js(on_computer_game_confirmation)
@@ -425,7 +436,7 @@ pub fn ui_update(state: UiState, msg) {
     }
     SetRequestGameWithComputerConfirmation(on_computer_game_confirmation) -> {
       case state.mode {
-        LobbyModeOption -> {
+        LobbyMode -> {
           #(
             UiState(
               mode: state.mode,
@@ -447,7 +458,7 @@ pub fn ui_update(state: UiState, msg) {
 
 pub fn ui_view(state: UiState) {
   case state.mode {
-    GameModeOption -> {
+    GameMode -> {
       let show_promotion = state.game_mode_settings.promotion
 
       case show_promotion {
@@ -472,7 +483,7 @@ pub fn ui_view(state: UiState) {
         }
       }
     }
-    LobbyModeOption -> {
+    LobbyMode -> {
       div([], [
         html.button([event.on("click", fn(_) { Ok(RequestGameWithComputer) })], [
           text("PLAY WITH THE COMPUTER"),

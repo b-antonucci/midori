@@ -249,11 +249,45 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
         }
       }
     }
+    ["game", game_id] -> {
+      case wisp.get_cookie(req, "user_id", wisp.PlainText) {
+        Ok(user_id) -> {
+          let user_check_result =
+            process.call(
+              ctx.user_manager_subject,
+              ConfirmUserExists(_, user_id),
+              1000,
+            )
+          case user_check_result {
+            Ok(_) -> {
+              let game_check_result =
+                process.call(
+                  ctx.user_manager_subject,
+                  GetUserGame(_, user_id),
+                  1000,
+                )
+              case game_check_result {
+                Ok(Some(_game_id)) -> {
+                  wisp.html_response(string_builder.from_string(html), 200)
+                }
+                _ -> {
+                  wisp.redirect("/")
+                }
+              }
+            }
+            Error(_msg) -> {
+              wisp.redirect("/")
+            }
+          }
+        }
+        Error(_msg) -> {
+          wisp.redirect("/")
+        }
+      }
+    }
     _ -> {
       case wisp.get_cookie(req, "user_id", wisp.PlainText) {
         Ok(user_id) -> {
-          // check that the cookie exists with the user manager
-          // and if it doesn't, create a new user_id and set the cookie
           let user_check_result =
             process.call(
               ctx.user_manager_subject,
