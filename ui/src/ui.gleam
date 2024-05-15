@@ -52,7 +52,11 @@ pub type UiModeOption {
 }
 
 pub type LobbyModeSettings {
-  LobbyModeSettings(on_computer_game_confirmation: Option(fn(String) -> Nil))
+  LobbyModeSettings(
+    on_computer_game_confirmation: Option(
+      fn(String, Array(Array(String))) -> Nil,
+    ),
+  )
 }
 
 pub type GameModeSettings {
@@ -72,7 +76,9 @@ pub type UiMsg {
   CallOnClick(PromotionMenuOptions)
   SetOnClick(fn(PromotionMenuClickData, Position, Position) -> Nil)
   RequestGameWithComputer
-  SetRequestGameWithComputerConfirmation(fn(String) -> Nil)
+  SetRequestGameWithComputerConfirmation(
+    fn(String, Array(Array(String))) -> Nil,
+  )
 }
 
 @external(javascript, "./ffi.js", "console_log_js")
@@ -121,7 +127,9 @@ pub fn get_data_field_object_as_array_js(
 ) -> Array(Array(String))
 
 @external(javascript, "./ffi.js", "request_game_with_computer_js")
-pub fn request_game_with_computer_js(callback: fn(String) -> Nil) -> Nil
+pub fn request_game_with_computer_js(
+  callback: fn(String, Array(Array(String))) -> Nil,
+) -> Nil
 
 pub fn main() {
   let socket = ws_init_js()
@@ -215,48 +223,7 @@ pub fn main() {
         promotions: None,
         fen: None,
         after: Some(after),
-        moves: Some([
-          #(Position(file: B, rank: One), [
-            Position(file: A, rank: Three),
-            Position(file: C, rank: Three),
-          ]),
-          #(Position(file: G, rank: One), [
-            Position(file: F, rank: Three),
-            Position(file: H, rank: Three),
-          ]),
-          #(Position(file: A, rank: Two), [
-            Position(file: A, rank: Three),
-            Position(file: A, rank: Four),
-          ]),
-          #(Position(file: B, rank: Two), [
-            Position(file: B, rank: Three),
-            Position(file: B, rank: Four),
-          ]),
-          #(Position(file: C, rank: Two), [
-            Position(file: C, rank: Three),
-            Position(file: C, rank: Four),
-          ]),
-          #(Position(file: D, rank: Two), [
-            Position(file: D, rank: Three),
-            Position(file: D, rank: Four),
-          ]),
-          #(Position(file: E, rank: Two), [
-            Position(file: E, rank: Three),
-            Position(file: E, rank: Four),
-          ]),
-          #(Position(file: F, rank: Two), [
-            Position(file: F, rank: Three),
-            Position(file: F, rank: Four),
-          ]),
-          #(Position(file: G, rank: Two), [
-            Position(file: G, rank: Three),
-            Position(file: G, rank: Four),
-          ]),
-          #(Position(file: H, rank: Two), [
-            Position(file: H, rank: Three),
-            Position(file: H, rank: Four),
-          ]),
-        ]),
+        moves: None,
       )),
     )
 
@@ -286,13 +253,55 @@ pub fn main() {
 
   ui_interface(dispatch(SetOnClick(after_promo_menu_click)))
 
-  let on_computer_game_confirmation = fn(fen: String) {
-    // TODO: it might make more sense for the chessboard interface to be
-    // stored within the ui state
+  let on_computer_game_confirmation = fn(
+    fen: String,
+    moves: Array(Array(String)),
+  ) {
+    let moves_list = array.to_list(moves)
+    let #(moves, promo_moves) =
+      list.fold(moves_list, #([], []), fn(acc, item) {
+        let move_set_list = array.to_list(item)
+        let assert Ok(origin) = list.first(move_set_list)
+        let destinations = case move_set_list {
+          [_, ..destinations] -> {
+            destinations
+          }
+          _ -> {
+            panic as "Invalid move set"
+          }
+        }
+        let origin: Origin = from_string(origin)
+        let #(destinations, promo_destinations) =
+          list.fold(destinations, #([], dict.new()), fn(acc, item) {
+            case string.length(item) {
+              2 -> {
+                let destination = from_string(item)
+                #(list.prepend(acc.0, destination), acc.1)
+              }
+              3 -> {
+                let destination = from_string(string.slice(item, 0, 2))
+                #(
+                  list.prepend(acc.0, destination),
+                  // TODO: check if dict is empty first? is there a better way to do this?
+                  dict.insert(acc.1, origin, destination),
+                )
+              }
+              _ -> {
+                panic as "Invalid destination"
+              }
+            }
+          })
+        #(
+          list.prepend(acc.0, #(origin, destinations)),
+          list.append(acc.1, dict.to_list(promo_destinations)),
+        )
+      })
 
     ui_interface(dispatch(ChangeMode(GameModeOption)))
     interface(dispatch(ToggleVisibility))
     interface(dispatch(SetFen(fen)))
+    interface(dispatch(SetMoves(moves)))
+    interface(dispatch(SetPromotions(promo_moves)))
   }
 
   ui_interface(

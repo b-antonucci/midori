@@ -95,7 +95,14 @@ export function request_game_with_computer_js(callback) {
   fetchRes.then(res =>
       res.json()).then(d => {
           const fen = d.fen;
-          callback(fen);
+          let moves_data = d.moves;
+          let moves_map = new Map(Object.entries(moves_data));
+          let array = [];
+          moves_map.forEach((value, key) => {
+            value.unshift(key);
+            array.push(value);
+          });
+          callback(fen, array);
           const nextURL = "/game/" + d.game_id;
           const nextTitle = 'Computer Game';
           const nextState = { additionalInformation: 'Updated the URL with JS' };
