@@ -1,6 +1,6 @@
-git clone git@github.com:macroby/gchess.git
+git clone git@github.com:b-antonucci/gchess.git
 cd ui
-git clone git@github.com:macroby/gchessboard.git
+git clone git@github.com:b-antonucci/gchessboard.git
 gleam build
 cd ..
 mkdir priv
