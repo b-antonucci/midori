@@ -249,7 +249,7 @@ pub fn handle_request(req: Request, ctx: Context) -> Response {
         }
       }
     }
-    ["game", game_id] -> {
+    ["game", _game_id] -> {
       case wisp.get_cookie(req, "user_id", wisp.PlainText) {
         Ok(user_id) -> {
           let user_check_result =
