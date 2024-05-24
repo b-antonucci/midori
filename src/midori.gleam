@@ -6,14 +6,20 @@ import gleam/erlang/process.{type Subject}
 import gleam/http/request.{type Request, Request, get_cookies}
 import gleam/http/response.{type Response}
 import gleam/json
+import gleam/list
 import gleam/option.{Some}
 import gleam/otp/actor
 import gleam/result
 import midori/bot_server
 import midori/bot_server_message.{SetGameManagerSubject}
-import midori/client_ws_message.{ConfirmMove, update_game_message_to_json}
+import midori/client_ws_message.{
+  ClientFormatMoveList, ConfirmMove, RequestGameData,
+  update_game_message_to_json,
+}
 import midori/game_manager
-import midori/game_manager_message.{type GameManagerMessage, ApplyMove}
+import midori/game_manager_message.{
+  type GameManagerMessage, ApplyMove, GetGameInfo,
+}
 import midori/ping_server.{type PingServerMessage}
 import midori/router
 import midori/uci_move.{convert_move}
@@ -25,6 +31,9 @@ import midori/ws_server_message.{
   type WebsocketServerMessage, AddConnection, RemoveConnection,
 }
 import mist.{type Connection, type ResponseData}
+import move.{Normal}
+import piece.{Bishop, Knight, Queen, Rook}
+import position
 import wisp
 
 type ConnectionState {
@@ -40,6 +49,10 @@ type ConnectionState {
 
 type ApplyMoveMessage {
   ApplyMoveMessage(move: String)
+}
+
+pub type RequestGameDataMessage {
+  RequestGameDataMessage(game_id: String)
 }
 
 pub fn main() {
@@ -169,46 +182,139 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
           actor.continue(state)
         }
         mist.Text(ws_message) -> {
-          let message_decoder =
-            dynamic.decode1(ApplyMoveMessage, field("move", string))
-          case json.decode(ws_message, message_decoder) {
-            Ok(ApplyMoveMessage(move)) -> {
-              let some_game_id_result =
-                process.call(user_manager_subject, GetUserGame(_, id), 1000)
-              let uci_move_result = convert_move(move)
-              case some_game_id_result, uci_move_result {
-                Ok(Some(game_id)), Ok(uci_move) -> {
+          case ws_message {
+            "{\"type\":\"request_game_data\"" <> _ -> {
+              let message_decoder =
+                dynamic.decode1(
+                  RequestGameDataMessage,
+                  field("game_id", string),
+                )
+              case json.decode(ws_message, message_decoder) {
+                Ok(RequestGameDataMessage(game_id)) -> {
                   let game_manager_response_result =
                     process.call(
                       game_manager_subject,
-                      ApplyMove(_, game_id, id, uci_move),
+                      GetGameInfo(_, game_id),
                       1000,
                     )
-
                   case game_manager_response_result {
                     Ok(game_manager_response) -> {
-                      let update_game_message =
-                        ConfirmMove(move: game_manager_response.move)
-                      let json =
-                        update_game_message_to_json(update_game_message)
+                      let unformatted_moves = game_manager_response.moves
+                      let formatted_moves =
+                        list.fold(
+                          unformatted_moves,
+                          ClientFormatMoveList(moves: []),
+                          fn(acc, move) {
+                            let origin = move.from
+                            let origin_string = position.to_string(origin)
+                            let promo = case move {
+                              Normal(_, _, Some(promo)) ->
+                                case promo.kind {
+                                  Queen -> "q"
+                                  Rook -> "r"
+                                  Knight -> "n"
+                                  Bishop -> "b"
+                                  _ -> ""
+                                }
+                              _ -> ""
+                            }
+                            case
+                              list.find(acc.moves, fn(move) {
+                                move.0 == origin_string
+                              })
+                            {
+                              Error(_) -> {
+                                let new_move = #(origin_string, [
+                                  position.to_string(move.to) <> promo,
+                                ])
+                                ClientFormatMoveList(moves: [
+                                  new_move,
+                                  ..acc.moves
+                                ])
+                              }
+                              Ok(#(_, destinations)) -> {
+                                let new_destinations =
+                                  list.append(destinations, [
+                                    position.to_string(move.to) <> promo,
+                                  ])
+                                let new_move = #(
+                                  origin_string,
+                                  new_destinations,
+                                )
+                                let new_moves =
+                                  list.filter(acc.moves, fn(move) {
+                                    move.0 != origin_string
+                                  })
+                                ClientFormatMoveList(moves: [
+                                  new_move,
+                                  ..new_moves
+                                ])
+                              }
+                            }
+                          },
+                        )
+
+                      let game_data_message =
+                        RequestGameData(
+                          moves: formatted_moves,
+                          fen: game_manager_response.fen,
+                        )
+                      let json = update_game_message_to_json(game_data_message)
 
                       case mist.send_text_frame(conn, json) {
                         Ok(_) -> actor.continue(state)
                         Error(_) -> actor.continue(state)
                       }
+                      actor.continue(state)
                     }
                     Error(_) -> actor.continue(state)
                   }
                 }
-                _, _ -> actor.continue(state)
+                Error(_) -> actor.continue(state)
               }
             }
-            Error(_) -> {
-              actor.continue(state)
-            }
-          }
+            "{\"type\":\"move\"" <> _ -> {
+              let message_decoder =
+                dynamic.decode1(ApplyMoveMessage, field("move", string))
+              case json.decode(ws_message, message_decoder) {
+                Ok(ApplyMoveMessage(move)) -> {
+                  let some_game_id_result =
+                    process.call(user_manager_subject, GetUserGame(_, id), 1000)
+                  let uci_move_result = convert_move(move)
+                  case some_game_id_result, uci_move_result {
+                    Ok(Some(game_id)), Ok(uci_move) -> {
+                      let game_manager_response_result =
+                        process.call(
+                          game_manager_subject,
+                          ApplyMove(_, game_id, id, uci_move),
+                          1000,
+                        )
 
-          actor.continue(state)
+                      case game_manager_response_result {
+                        Ok(game_manager_response) -> {
+                          let update_game_message =
+                            ConfirmMove(move: game_manager_response.move)
+                          let json =
+                            update_game_message_to_json(update_game_message)
+
+                          case mist.send_text_frame(conn, json) {
+                            Ok(_) -> actor.continue(state)
+                            Error(_) -> actor.continue(state)
+                          }
+                        }
+                        Error(_) -> actor.continue(state)
+                      }
+                    }
+                    _, _ -> actor.continue(state)
+                  }
+                }
+                Error(_) -> {
+                  actor.continue(state)
+                }
+              }
+            }
+            _ -> actor.continue(state)
+          }
         }
         mist.Text(_) | mist.Binary(_) -> {
           actor.continue(state)

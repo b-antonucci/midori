@@ -11,6 +11,7 @@ pub type ClientFormatMoveList {
 pub type ClientWebsocketMessage {
   ConfirmMove(move: uci_move.UciMove)
   BotMove(moves: ClientFormatMoveList, fen: String)
+  RequestGameData(moves: ClientFormatMoveList, fen: String)
 }
 
 pub fn update_game_message_to_json(
@@ -22,6 +23,16 @@ pub fn update_game_message_to_json(
       |> json.to_string
     }
     BotMove(moves, fen) -> {
+      let moves = moves.moves
+      let moves_with_json_dests =
+        list.map(moves, fn(move) { #(move.0, array(move.1, of: json_string)) })
+      object([
+        #("moves", object(moves_with_json_dests)),
+        #("fen", json_string(fen)),
+      ])
+      |> json.to_string
+    }
+    RequestGameData(moves, fen) -> {
       let moves = moves.moves
       let moves_with_json_dests =
         list.map(moves, fn(move) { #(move.0, array(move.1, of: json_string)) })

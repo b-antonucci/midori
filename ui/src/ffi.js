@@ -89,6 +89,13 @@ export function ws_send_move_js(socket, message) {
   socket.send(JSON.stringify(message));
 }
 
+export function ws_send_game_data_request_js(socket, message) {
+  socket.onopen = function (e) {
+    message = Object.assign({ type: "request_game_data"}, message);
+    socket.send(JSON.stringify(message));
+  };
+}
+
 export function request_game_with_computer_js(callback) {
   let fetchRes = fetch("/request_game_with_computer");
         

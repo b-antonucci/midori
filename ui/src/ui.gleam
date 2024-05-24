@@ -21,6 +21,10 @@ pub type ApplyMoveMessage {
   ApplyMoveMessage(move: String)
 }
 
+pub type RequestGameDataMessage {
+  RequestGameDataMessage(game_id: String)
+}
+
 pub type UpdateGameResponse {
   UpdateGameResponse(moves: List(String), fen: String)
 }
@@ -106,6 +110,12 @@ pub fn ws_onerror_js(socket: Websocket, callback: fn() -> Nil) -> Nil
 @external(javascript, "./ffi.js", "ws_send_move_js")
 pub fn ws_send_move_js(socket: Websocket, message: ApplyMoveMessage) -> Nil
 
+@external(javascript, "./ffi.js", "ws_send_game_data_request_js")
+pub fn ws_send_game_data_request_js(
+  socket: Websocket,
+  message: RequestGameDataMessage,
+) -> Nil
+
 @external(javascript, "./ffi.js", "ws_init_js")
 pub fn ws_init_js() -> Websocket
 
@@ -138,9 +148,20 @@ pub fn main() {
   let url_pathname = url_pathname_js()
 
   let assert Ok(interface) = lustre.start(app, "[gchessboard-lustre-app]", Nil)
+
   let ui_mode = case url_pathname {
-    "/game/" <> _game_id -> {
+    "/game/" <> game_id -> {
       interface(dispatch(ToggleVisibility))
+      // TODO: this NextTurn Dispatch is a hack because the on_message function calls
+      // this same dispatch since it assumes that the arrival of a move signifies a change
+      // of turns. That is not the case here since we are getting state of the game, and not
+      // the response to one of our moves. The solution that comes to mind is a "SetTurn" 
+      // message.
+      interface(dispatch(NextTurn))
+      ws_send_game_data_request_js(
+        socket,
+        RequestGameDataMessage(game_id: game_id),
+      )
       GameMode
     }
     _ -> {
@@ -149,6 +170,37 @@ pub fn main() {
   }
   let ui_app = application(ui_init(_, ui_mode), ui_update, ui_view)
   let assert Ok(ui_interface) = lustre.start(ui_app, "[ui-lustre-app]", Nil)
+
+  let after = fn(move_data) {
+    let move_data: MoveData = move_data
+
+    case move_data.promotion {
+      True -> {
+        ui_interface(dispatch(ShowPromotion(move_data.from, move_data.to)))
+      }
+      False -> {
+        let from = position.to_string(move_data.from)
+        let to = position.to_string(move_data.to)
+        let move = from <> "-" <> to
+        ws_send_move_js(socket, ApplyMoveMessage(move))
+      }
+    }
+    Nil
+  }
+
+  let config =
+    Config(
+      moveable: Some(Moveable(
+        player: Some(White),
+        promotions: None,
+        fen: None,
+        after: Some(after),
+        moves: None,
+      )),
+    )
+
+  interface(dispatch(Set(config)))
+
   let on_message = fn(message) {
     case get_data_as_string_js(message) {
       "pong" -> {
@@ -210,36 +262,6 @@ pub fn main() {
   }
 
   ws_onmessage_js(socket, on_message)
-
-  let after = fn(move_data) {
-    let move_data: MoveData = move_data
-
-    case move_data.promotion {
-      True -> {
-        ui_interface(dispatch(ShowPromotion(move_data.from, move_data.to)))
-      }
-      False -> {
-        let from = position.to_string(move_data.from)
-        let to = position.to_string(move_data.to)
-        let move = from <> "-" <> to
-        ws_send_move_js(socket, ApplyMoveMessage(move))
-      }
-    }
-    Nil
-  }
-
-  let config =
-    Config(
-      moveable: Some(Moveable(
-        player: Some(White),
-        promotions: None,
-        fen: None,
-        after: Some(after),
-        moves: None,
-      )),
-    )
-
-  interface(dispatch(Set(config)))
 
   let after_promo_menu_click = fn(promo_menu_data, from, to) {
     let promo_menu_data: PromotionMenuClickData = promo_menu_data
