@@ -1,14 +1,14 @@
 import config.{type Config, Config, Moveable}
 import gchessboard.{
-  HideBoard, NextTurn, Set, SetFen, SetMoves, SetPromotions, SetTurn, ShowBoard,
-  ToggleVisibility, init, update, view,
+  type Msg, HideBoard, NextTurn, Set, SetFen, SetMoves, SetPromotions, SetTurn,
+  ShowBoard, ToggleVisibility, init, update, view,
 }
 import gleam/dict
 import gleam/javascript/array.{type Array}
 import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
-import lustre.{application, dispatch}
+import lustre.{type Action, type ClientSpa, application, dispatch}
 import lustre/effect
 import lustre/element/html.{div, text}
 import lustre/event
@@ -45,6 +45,7 @@ pub type UiState {
     mode: UiMode,
     lobby_mode_settings: LobbyModeSettings,
     game_mode_settings: GameModeSettings,
+    chessboard_interface: fn(Action(Msg, ClientSpa)) -> Nil,
   )
 }
 
@@ -159,7 +160,7 @@ pub fn main() {
       LobbyMode
     }
   }
-  let ui_app = application(ui_init(_, ui_mode), ui_update, ui_view)
+  let ui_app = application(ui_init(_, ui_mode, interface), ui_update, ui_view)
   let assert Ok(ui_interface) = lustre.start(ui_app, "[ui-lustre-app]", Nil)
 
   let after = fn(move_data) {
@@ -360,7 +361,11 @@ pub fn main() {
   Nil
 }
 
-pub fn ui_init(_, ui_mode: UiMode) {
+pub fn ui_init(
+  _,
+  ui_mode: UiMode,
+  chessboard_interface: fn(Action(Msg, ClientSpa)) -> Nil,
+) {
   let game_mode_settings =
     GameModeSettings(
       promotion: False,
@@ -369,7 +374,15 @@ pub fn ui_init(_, ui_mode: UiMode) {
       to: None,
     )
   let lobby_mode_settings = LobbyModeSettings(None)
-  #(UiState(ui_mode, lobby_mode_settings, game_mode_settings), effect.none())
+  #(
+    UiState(
+      ui_mode,
+      lobby_mode_settings,
+      game_mode_settings,
+      chessboard_interface,
+    ),
+    effect.none(),
+  )
 }
 
 pub fn ui_update(state: UiState, msg) {
@@ -380,6 +393,7 @@ pub fn ui_update(state: UiState, msg) {
           mode: mode,
           lobby_mode_settings: state.lobby_mode_settings,
           game_mode_settings: state.game_mode_settings,
+          chessboard_interface: state.chessboard_interface,
         ),
         effect.none(),
       )
@@ -397,6 +411,7 @@ pub fn ui_update(state: UiState, msg) {
                 to: Some(to),
                 promotion_on_click: state.game_mode_settings.promotion_on_click,
               ),
+              chessboard_interface: state.chessboard_interface,
             ),
             effect.none(),
           )
@@ -430,6 +445,7 @@ pub fn ui_update(state: UiState, msg) {
                 to: None,
                 promotion_on_click: Some(promotion_on_click),
               ),
+              chessboard_interface: state.chessboard_interface,
             ),
             effect.none(),
           )
@@ -450,6 +466,7 @@ pub fn ui_update(state: UiState, msg) {
             from: state.game_mode_settings.from,
             to: state.game_mode_settings.to,
           ),
+          chessboard_interface: state.chessboard_interface,
         ),
         effect.none(),
       )
@@ -475,6 +492,7 @@ pub fn ui_update(state: UiState, msg) {
             on_computer_game_confirmation,
           )),
           game_mode_settings: state.game_mode_settings,
+          chessboard_interface: state.chessboard_interface,
         ),
         effect.none(),
       )
