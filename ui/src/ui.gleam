@@ -1,7 +1,7 @@
 import config.{type Config, Config, Moveable}
 import gchessboard.{
-  NextTurn, Set, SetFen, SetMoves, SetPromotions, ToggleVisibility, init, update,
-  view,
+  HideBoard, NextTurn, Set, SetFen, SetMoves, SetPromotions, ShowBoard,
+  ToggleVisibility, init, update, view,
 }
 import gleam/dict
 import gleam/javascript/array.{type Array}
@@ -83,17 +83,8 @@ pub type UiMsg {
   )
 }
 
-@external(javascript, "./ffi.js", "console_log_js")
-pub fn console_log_js_ui_state(message: UiState) -> Nil
-
-@external(javascript, "./ffi.js", "alert_js")
-pub fn alert_js_int(message: Int) -> Nil
-
 @external(javascript, "./ffi.js", "alert_js")
 pub fn alert_js_string(message: String) -> Nil
-
-@external(javascript, "./ffi.js", "alert_js_object_data")
-pub fn alert_js_object_data(message: String) -> Nil
 
 @external(javascript, "./ffi.js", "ws_onmessage_js")
 pub fn ws_onmessage_js(socket: Websocket, callback: fn(String) -> Nil) -> Nil
@@ -103,9 +94,6 @@ pub fn ws_onopen_js(socket: Websocket, callback: fn() -> Nil) -> Nil
 
 @external(javascript, "./ffi.js", "ws_onclose_js")
 pub fn ws_onclose_js(socket: Websocket, callback: fn() -> Nil) -> Nil
-
-@external(javascript, "./ffi.js", "ws_onerror_js")
-pub fn ws_onerror_js(socket: Websocket, callback: fn() -> Nil) -> Nil
 
 @external(javascript, "./ffi.js", "ws_send_move_js")
 pub fn ws_send_move_js(socket: Websocket, message: ApplyMoveMessage) -> Nil
@@ -125,9 +113,6 @@ pub fn get_data_as_string_js(object: String) -> String
 @external(javascript, "./ffi.js", "get_data_field_js")
 pub fn get_data_field_js(object: String, field: String) -> String
 
-@external(javascript, "./ffi.js", "get_data_field_array_js")
-pub fn get_data_field_array_js(object: String, field: String) -> Array(String)
-
 @external(javascript, "./ffi.js", "get_data_field_object_as_array_js")
 pub fn get_data_field_object_as_array_js(
   object: String,
@@ -139,8 +124,14 @@ pub fn request_game_with_computer_js(
   callback: fn(String, Array(Array(String))) -> Nil,
 ) -> Nil
 
+@external(javascript, "./ffi.js", "set_back_button_callback_js")
+pub fn set_back_button_callback_js(callback: fn(String) -> Nil) -> Nil
+
 @external(javascript, "./ffi.js", "url_pathname_js")
 pub fn url_pathname_js() -> String
+
+@external(javascript, "./ffi.js", "set_pathname_js")
+pub fn set_pathname_js(pathname: String) -> Nil
 
 pub fn main() {
   let socket = ws_init_js()
@@ -343,6 +334,22 @@ pub fn main() {
       on_computer_game_confirmation,
     )),
   )
+
+  let on_back_button_click = fn(pathname) {
+    case pathname {
+      "/" -> {
+        ui_interface(dispatch(ChangeMode(LobbyMode)))
+        interface(dispatch(HideBoard))
+      }
+      "/game/" <> _game_id -> {
+        ui_interface(dispatch(ChangeMode(GameMode)))
+        interface(dispatch(ShowBoard))
+      }
+      _ -> set_pathname_js("/")
+    }
+  }
+
+  set_back_button_callback_js(on_back_button_click)
 
   Nil
 }

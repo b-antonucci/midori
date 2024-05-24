@@ -15,11 +15,6 @@ export function get_data_field_js(some_object, field) {
   return data_object[field];
 }
 
-export function get_data_field_array_js(some_object, field) {
-  let data_object = JSON.parse(some_object.data);
-  return data_object[field];
-}
-
 export function get_data_field_object_as_array_js(some_object, field) {
   let data_object = JSON.parse(some_object.data);
   let field_data = data_object[field];
@@ -80,10 +75,6 @@ export function ws_onclose_js(socket, callback) {
   socket.onclose = callback;
 }
 
-export function ws_onerror_js(socket, callback) {
-  socket.onerror = callback;
-}
-
 export function ws_send_move_js(socket, message) {
   message = Object.assign({ type: "move" }, message);
   socket.send(JSON.stringify(message));
@@ -118,6 +109,21 @@ export function request_game_with_computer_js(callback) {
           window.history.pushState(nextState, nextTitle, nextURL);
           console.log(d)
       })
+}
+
+export function set_pathname_js(pathname) {
+  const nextURL = pathname;
+  const nextTitle = 'set pathname';
+  const nextState = { additionalInformation: 'Updated the URL with JS' };
+
+  // This will create a new entry in the browser's history, without reloading
+  window.history.pushState(nextState, nextTitle, nextURL);
+}
+
+export function set_back_button_callback_js(callback) {
+  window.addEventListener('popstate', function (event) {
+      callback(location.pathname)
+  });  
 }
 
 export function console_log_js(message) {
