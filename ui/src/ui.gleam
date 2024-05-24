@@ -508,6 +508,16 @@ pub fn ui_view(state: UiState) {
       case show_promotion {
         True -> {
           div([], [
+            html.button(
+              [
+                event.on("click", fn(_) {
+                  state.chessboard_interface(dispatch(HideBoard))
+                  Ok(ChangeMode(LobbyMode))
+                }),
+              ],
+              [text("Return To Lobby")],
+            ),
+            html.br([]),
             html.button([event.on("click", fn(_) { Ok(CallOnClick(Queen)) })], [
               text("Queen"),
             ]),
@@ -523,7 +533,18 @@ pub fn ui_view(state: UiState) {
           ])
         }
         False -> {
-          div([], [])
+          div([], [
+            html.button(
+              [
+                event.on("click", fn(_) {
+                  state.chessboard_interface(dispatch(HideBoard))
+                  set_pathname_js("/")
+                  Ok(ChangeMode(LobbyMode))
+                }),
+              ],
+              [text("Return To Lobby")],
+            ),
+          ])
         }
       }
     }
