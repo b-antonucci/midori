@@ -182,19 +182,26 @@ fn handle_message(
       ))
     }
     GetGameInfo(client, id) -> {
-      let assert Ok(server) = dict.get(state.game_map, id)
-      let fen = game_server.get_fen(server)
-      let status_option = game_server.get_status(server)
-      let moves = game_server.all_legal_moves(server)
-      case status_option {
-        Some(status) -> {
-          process.send(
-            client,
-            Ok(GameInfo(fen: fen, status: status, moves: moves)),
-          )
-          actor.continue(state)
+      case dict.get(state.game_map, id) {
+        Ok(server) -> {
+          let fen = game_server.get_fen(server)
+          let status_option = game_server.get_status(server)
+          let moves = game_server.all_legal_moves(server)
+          case status_option {
+            Some(status) -> {
+              process.send(
+                client,
+                Ok(GameInfo(fen: fen, status: status, moves: moves)),
+              )
+              actor.continue(state)
+            }
+            None -> {
+              process.send(client, Error("Game not found"))
+              actor.continue(state)
+            }
+          }
         }
-        None -> {
+        Error(_) -> {
           process.send(client, Error("Game not found"))
           actor.continue(state)
         }

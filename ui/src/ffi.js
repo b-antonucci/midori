@@ -120,7 +120,7 @@ export function set_pathname_js(pathname) {
   window.history.pushState(nextState, nextTitle, nextURL);
 }
 
-export function set_back_button_callback_js(callback) {
+export function set_navigation_button_callback_js(callback) {
   window.addEventListener('popstate', function (event) {
       callback(location.pathname)
   });  

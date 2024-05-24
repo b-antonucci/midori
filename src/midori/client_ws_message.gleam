@@ -33,6 +33,7 @@ pub fn update_game_message_to_json(
       |> json.to_string
     }
     RequestGameData(moves, fen) -> {
+      // TODO: this needs to be labeled as a response to a game data request
       let moves = moves.moves
       let moves_with_json_dests =
         list.map(moves, fn(move) { #(move.0, array(move.1, of: json_string)) })

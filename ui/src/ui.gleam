@@ -1,6 +1,6 @@
 import config.{type Config, Config, Moveable}
 import gchessboard.{
-  HideBoard, NextTurn, Set, SetFen, SetMoves, SetPromotions, ShowBoard,
+  HideBoard, NextTurn, Set, SetFen, SetMoves, SetPromotions, SetTurn, ShowBoard,
   ToggleVisibility, init, update, view,
 }
 import gleam/dict
@@ -124,8 +124,8 @@ pub fn request_game_with_computer_js(
   callback: fn(String, Array(Array(String))) -> Nil,
 ) -> Nil
 
-@external(javascript, "./ffi.js", "set_back_button_callback_js")
-pub fn set_back_button_callback_js(callback: fn(String) -> Nil) -> Nil
+@external(javascript, "./ffi.js", "set_navigation_button_callback_js")
+pub fn set_navigation_button_callback_js(callback: fn(String) -> Nil) -> Nil
 
 @external(javascript, "./ffi.js", "url_pathname_js")
 pub fn url_pathname_js() -> String
@@ -192,6 +192,64 @@ pub fn main() {
 
   interface(dispatch(Set(config)))
 
+  let on_computer_game_confirmation = fn(
+    fen: String,
+    moves: Array(Array(String)),
+  ) {
+    let moves_list = array.to_list(moves)
+    let #(moves, promo_moves) =
+      list.fold(moves_list, #([], []), fn(acc, item) {
+        let move_set_list = array.to_list(item)
+        let assert Ok(origin) = list.first(move_set_list)
+        let destinations = case move_set_list {
+          [_, ..destinations] -> {
+            destinations
+          }
+          _ -> {
+            panic as "Invalid move set"
+          }
+        }
+        let origin: Origin = from_string(origin)
+        let #(destinations, promo_destinations) =
+          list.fold(destinations, #([], dict.new()), fn(acc, item) {
+            case string.length(item) {
+              2 -> {
+                let destination = from_string(item)
+                #(list.prepend(acc.0, destination), acc.1)
+              }
+              3 -> {
+                let destination = from_string(string.slice(item, 0, 2))
+                #(
+                  list.prepend(acc.0, destination),
+                  // TODO: check if dict is empty first? is there a better way to do this?
+                  dict.insert(acc.1, origin, destination),
+                )
+              }
+              _ -> {
+                panic as "Invalid destination"
+              }
+            }
+          })
+        #(
+          list.prepend(acc.0, #(origin, destinations)),
+          list.append(acc.1, dict.to_list(promo_destinations)),
+        )
+      })
+
+    ui_interface(dispatch(ChangeMode(GameMode)))
+    interface(dispatch(ToggleVisibility))
+    interface(dispatch(SetFen(fen)))
+    interface(dispatch(SetMoves(moves)))
+    interface(dispatch(SetPromotions(promo_moves)))
+    interface(dispatch(SetTurn(types.White)))
+  }
+
+  ui_interface(
+    dispatch(SetRequestGameWithComputerConfirmation(
+      on_computer_game_confirmation,
+    )),
+  )
+
   let on_message = fn(message) {
     case get_data_as_string_js(message) {
       "pong" -> {
@@ -245,6 +303,11 @@ pub fn main() {
         interface(dispatch(NextTurn))
         Nil
       }
+      "{\"type\":\"request_game_data\",\"error\":\"dne\"}" -> {
+        set_pathname_js("/")
+        ui_interface(dispatch(ChangeMode(LobbyMode)))
+        interface(dispatch(HideBoard))
+      }
       _ws_message -> {
         let _move = get_data_field_js(message, "move")
         Nil
@@ -278,63 +341,6 @@ pub fn main() {
 
   ui_interface(dispatch(SetOnClick(after_promo_menu_click)))
 
-  let on_computer_game_confirmation = fn(
-    fen: String,
-    moves: Array(Array(String)),
-  ) {
-    let moves_list = array.to_list(moves)
-    let #(moves, promo_moves) =
-      list.fold(moves_list, #([], []), fn(acc, item) {
-        let move_set_list = array.to_list(item)
-        let assert Ok(origin) = list.first(move_set_list)
-        let destinations = case move_set_list {
-          [_, ..destinations] -> {
-            destinations
-          }
-          _ -> {
-            panic as "Invalid move set"
-          }
-        }
-        let origin: Origin = from_string(origin)
-        let #(destinations, promo_destinations) =
-          list.fold(destinations, #([], dict.new()), fn(acc, item) {
-            case string.length(item) {
-              2 -> {
-                let destination = from_string(item)
-                #(list.prepend(acc.0, destination), acc.1)
-              }
-              3 -> {
-                let destination = from_string(string.slice(item, 0, 2))
-                #(
-                  list.prepend(acc.0, destination),
-                  // TODO: check if dict is empty first? is there a better way to do this?
-                  dict.insert(acc.1, origin, destination),
-                )
-              }
-              _ -> {
-                panic as "Invalid destination"
-              }
-            }
-          })
-        #(
-          list.prepend(acc.0, #(origin, destinations)),
-          list.append(acc.1, dict.to_list(promo_destinations)),
-        )
-      })
-
-    ui_interface(dispatch(ChangeMode(GameMode)))
-    interface(dispatch(ToggleVisibility))
-    interface(dispatch(SetFen(fen)))
-    interface(dispatch(SetMoves(moves)))
-    interface(dispatch(SetPromotions(promo_moves)))
-  }
-
-  ui_interface(
-    dispatch(SetRequestGameWithComputerConfirmation(
-      on_computer_game_confirmation,
-    )),
-  )
-
   let on_back_button_click = fn(pathname) {
     case pathname {
       "/" -> {
@@ -349,7 +355,7 @@ pub fn main() {
     }
   }
 
-  set_back_button_callback_js(on_back_button_click)
+  set_navigation_button_callback_js(on_back_button_click)
 
   Nil
 }
@@ -462,23 +468,16 @@ pub fn ui_update(state: UiState, msg) {
       }
     }
     SetRequestGameWithComputerConfirmation(on_computer_game_confirmation) -> {
-      case state.mode {
-        LobbyMode -> {
-          #(
-            UiState(
-              mode: state.mode,
-              lobby_mode_settings: LobbyModeSettings(Some(
-                on_computer_game_confirmation,
-              )),
-              game_mode_settings: state.game_mode_settings,
-            ),
-            effect.none(),
-          )
-        }
-        _ -> {
-          #(state, effect.none())
-        }
-      }
+      #(
+        UiState(
+          mode: state.mode,
+          lobby_mode_settings: LobbyModeSettings(Some(
+            on_computer_game_confirmation,
+          )),
+          game_mode_settings: state.game_mode_settings,
+        ),
+        effect.none(),
+      )
     }
   }
 }

@@ -267,10 +267,22 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                       }
                       actor.continue(state)
                     }
-                    Error(_) -> actor.continue(state)
+                    Error(_) -> {
+                      case
+                        mist.send_text_frame(
+                          conn,
+                          "{\"type\":\"request_game_data\",\"error\":\"dne\"}",
+                        )
+                      {
+                        Ok(_) -> actor.continue(state)
+                        Error(_) -> actor.continue(state)
+                      }
+                    }
                   }
                 }
-                Error(_) -> actor.continue(state)
+                Error(_) -> {
+                  actor.continue(state)
+                }
               }
             }
             "{\"type\":\"move\"" <> _ -> {
