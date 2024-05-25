@@ -9,6 +9,7 @@ import gleam/list
 import gleam/option.{type Option, None, Some}
 import gleam/string
 import lustre.{type Action, type ClientSpa, application, dispatch}
+import lustre/attribute.{id}
 import lustre/effect
 import lustre/element/html.{div, text}
 import lustre/event
@@ -510,12 +511,14 @@ pub fn ui_view(state: UiState) {
           div([], [
             html.button(
               [
+                id("title-button"),
+                title_button_style(),
                 event.on("click", fn(_) {
                   state.chessboard_interface(dispatch(HideBoard))
                   Ok(ChangeMode(LobbyMode))
                 }),
               ],
-              [text("Return To Lobby")],
+              [text("shahmat.org")],
             ),
             html.br([]),
             html.button([event.on("click", fn(_) { Ok(CallOnClick(Queen)) })], [
@@ -536,13 +539,15 @@ pub fn ui_view(state: UiState) {
           div([], [
             html.button(
               [
+                id("title-button"),
+                title_button_style(),
                 event.on("click", fn(_) {
                   state.chessboard_interface(dispatch(HideBoard))
                   set_pathname_js("/")
                   Ok(ChangeMode(LobbyMode))
                 }),
               ],
-              [text("Return To Lobby")],
+              [text("shahmat.org")],
             ),
           ])
         }
@@ -550,10 +555,35 @@ pub fn ui_view(state: UiState) {
     }
     LobbyMode -> {
       div([], [
+        html.button(
+          [
+            id("title-button"),
+            title_button_style(),
+            event.on("click", fn(_) {
+              state.chessboard_interface(dispatch(HideBoard))
+              set_pathname_js("/")
+              Ok(ChangeMode(LobbyMode))
+            }),
+          ],
+          [text("shahmat.org")],
+        ),
+        html.br([]),
         html.button([event.on("click", fn(_) { Ok(RequestGameWithComputer) })], [
           text("PLAY WITH THE COMPUTER"),
         ]),
       ])
     }
   }
+}
+
+pub fn title_button_style() {
+  attribute.style([
+    #("background", "none"),
+    #("border", "none"),
+    #("margin", "0"),
+    #("padding", "0"),
+    #("cursor", "pointer"),
+    #("font-size", "30px"),
+    #("color", "#bababa"),
+  ])
 }

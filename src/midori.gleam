@@ -331,8 +331,7 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
         mist.Text(_) | mist.Binary(_) -> {
           actor.continue(state)
         }
-        mist.Custom(Broadcast(text)) -> {
-          let assert Ok(_) = mist.send_text_frame(conn, text)
+        mist.Custom(Broadcast(_text)) -> {
           actor.continue(state)
         }
         mist.Closed | mist.Shutdown -> actor.Stop(process.Normal)

@@ -26,7 +26,7 @@ const html = "
 
     <style>
         body {
-            background-color: #97AC9B;
+            background-color: #151411;
         }
     </style>
 
