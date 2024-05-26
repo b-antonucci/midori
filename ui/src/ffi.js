@@ -87,28 +87,9 @@ export function ws_send_game_data_request_js(socket, message) {
   };
 }
 
-export function request_game_with_computer_js(callback) {
-  let fetchRes = fetch("/request_game_with_computer");
-        
-  fetchRes.then(res =>
-      res.json()).then(d => {
-          const fen = d.fen;
-          let moves_data = d.moves;
-          let moves_map = new Map(Object.entries(moves_data));
-          let array = [];
-          moves_map.forEach((value, key) => {
-            value.unshift(key);
-            array.push(value);
-          });
-          callback(fen, array);
-          const nextURL = "/game/" + d.game_id;
-          const nextTitle = 'Computer Game';
-          const nextState = { additionalInformation: 'Updated the URL with JS' };
-
-          // This will create a new entry in the browser's history, without reloading
-          window.history.pushState(nextState, nextTitle, nextURL);
-          console.log(d)
-      })
+export function ws_request_game_with_computer_js(socket) {
+  var message = { type: "request_game_with_computer" };
+  socket.send(JSON.stringify(message));
 }
 
 export function set_pathname_js(pathname) {

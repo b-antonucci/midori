@@ -56,11 +56,7 @@ pub type UiMode {
 }
 
 pub type LobbyModeSettings {
-  LobbyModeSettings(
-    on_computer_game_confirmation: Option(
-      fn(String, Array(Array(String))) -> Nil,
-    ),
-  )
+  LobbyModeSettings(on_computer_game_request_click: Option(fn() -> Nil))
 }
 
 pub type GameModeSettings {
@@ -80,9 +76,7 @@ pub type UiMsg {
   CallOnClick(PromotionMenuOptions)
   SetOnClick(fn(PromotionMenuClickData, Position, Position) -> Nil)
   RequestGameWithComputer
-  SetRequestGameWithComputerConfirmation(
-    fn(String, Array(Array(String))) -> Nil,
-  )
+  SetOnComputerGameRequestClick(fn() -> Nil)
 }
 
 @external(javascript, "./ffi.js", "alert_js")
@@ -106,6 +100,9 @@ pub fn ws_send_game_data_request_js(
   message: RequestGameDataMessage,
 ) -> Nil
 
+@external(javascript, "./ffi.js", "ws_request_game_with_computer_js")
+pub fn ws_request_game_with_computer_js(socket: Websocket) -> Nil
+
 @external(javascript, "./ffi.js", "ws_init_js")
 pub fn ws_init_js() -> Websocket
 
@@ -120,11 +117,6 @@ pub fn get_data_field_object_as_array_js(
   object: String,
   field: String,
 ) -> Array(Array(String))
-
-@external(javascript, "./ffi.js", "request_game_with_computer_js")
-pub fn request_game_with_computer_js(
-  callback: fn(String, Array(Array(String))) -> Nil,
-) -> Nil
 
 @external(javascript, "./ffi.js", "set_navigation_button_callback_js")
 pub fn set_navigation_button_callback_js(callback: fn(String) -> Nil) -> Nil
@@ -194,62 +186,12 @@ pub fn main() {
 
   interface(dispatch(Set(config)))
 
-  let on_computer_game_confirmation = fn(
-    fen: String,
-    moves: Array(Array(String)),
-  ) {
-    let moves_list = array.to_list(moves)
-    let #(moves, promo_moves) =
-      list.fold(moves_list, #([], []), fn(acc, item) {
-        let move_set_list = array.to_list(item)
-        let assert Ok(origin) = list.first(move_set_list)
-        let destinations = case move_set_list {
-          [_, ..destinations] -> {
-            destinations
-          }
-          _ -> {
-            panic as "Invalid move set"
-          }
-        }
-        let origin: Origin = from_string(origin)
-        let #(destinations, promo_destinations) =
-          list.fold(destinations, #([], dict.new()), fn(acc, item) {
-            case string.length(item) {
-              2 -> {
-                let destination = from_string(item)
-                #(list.prepend(acc.0, destination), acc.1)
-              }
-              3 -> {
-                let destination = from_string(string.slice(item, 0, 2))
-                #(
-                  list.prepend(acc.0, destination),
-                  // TODO: check if dict is empty first? is there a better way to do this?
-                  dict.insert(acc.1, origin, destination),
-                )
-              }
-              _ -> {
-                panic as "Invalid destination"
-              }
-            }
-          })
-        #(
-          list.prepend(acc.0, #(origin, destinations)),
-          list.append(acc.1, dict.to_list(promo_destinations)),
-        )
-      })
-
-    ui_interface(dispatch(ChangeMode(GameMode)))
-    interface(dispatch(ToggleVisibility))
-    interface(dispatch(SetFen(fen)))
-    interface(dispatch(SetMoves(moves)))
-    interface(dispatch(SetPromotions(promo_moves)))
-    interface(dispatch(SetTurn(types.White)))
+  let on_computer_game_request_click = fn() {
+    ws_request_game_with_computer_js(socket)
   }
 
   ui_interface(
-    dispatch(SetRequestGameWithComputerConfirmation(
-      on_computer_game_confirmation,
-    )),
+    dispatch(SetOnComputerGameRequestClick(on_computer_game_request_click)),
   )
 
   let on_message = fn(message) {
@@ -309,6 +251,56 @@ pub fn main() {
         set_pathname_js("/")
         ui_interface(dispatch(ChangeMode(LobbyMode)))
         interface(dispatch(HideBoard))
+      }
+      "{\"game_id\":" <> _ -> {
+        let moves = get_data_field_object_as_array_js(message, "moves")
+        let fen = get_data_field_js(message, "fen")
+        let moves_list = array.to_list(moves)
+        let #(moves, promo_moves) =
+          list.fold(moves_list, #([], []), fn(acc, item) {
+            let move_set_list = array.to_list(item)
+            let assert Ok(origin) = list.first(move_set_list)
+            let destinations = case move_set_list {
+              [_, ..destinations] -> {
+                destinations
+              }
+              _ -> {
+                panic as "Invalid move set"
+              }
+            }
+            let origin: Origin = from_string(origin)
+            let #(destinations, promo_destinations) =
+              list.fold(destinations, #([], dict.new()), fn(acc, item) {
+                case string.length(item) {
+                  2 -> {
+                    let destination = from_string(item)
+                    #(list.prepend(acc.0, destination), acc.1)
+                  }
+                  3 -> {
+                    let destination = from_string(string.slice(item, 0, 2))
+                    #(
+                      list.prepend(acc.0, destination),
+                      // TODO: check if dict is empty first? is there a better way to do this?
+                      dict.insert(acc.1, origin, destination),
+                    )
+                  }
+                  _ -> {
+                    panic as "Invalid destination"
+                  }
+                }
+              })
+            #(
+              list.prepend(acc.0, #(origin, destinations)),
+              list.append(acc.1, dict.to_list(promo_destinations)),
+            )
+          })
+
+        ui_interface(dispatch(ChangeMode(GameMode)))
+        interface(dispatch(ToggleVisibility))
+        interface(dispatch(SetFen(fen)))
+        interface(dispatch(SetMoves(moves)))
+        interface(dispatch(SetPromotions(promo_moves)))
+        interface(dispatch(SetTurn(types.White)))
       }
       _ws_message -> {
         let _move = get_data_field_js(message, "move")
@@ -475,9 +467,10 @@ pub fn ui_update(state: UiState, msg) {
     RequestGameWithComputer -> {
       case state.mode {
         LobbyMode -> {
-          let assert Some(on_computer_game_confirmation) =
-            state.lobby_mode_settings.on_computer_game_confirmation
-          request_game_with_computer_js(on_computer_game_confirmation)
+          // New game request logic
+          let assert Some(on_computer_game_request_click) =
+            state.lobby_mode_settings.on_computer_game_request_click
+          on_computer_game_request_click()
           #(state, effect.none())
         }
         _ -> {
@@ -485,13 +478,13 @@ pub fn ui_update(state: UiState, msg) {
         }
       }
     }
-    SetRequestGameWithComputerConfirmation(on_computer_game_confirmation) -> {
+    SetOnComputerGameRequestClick(on_computer_game_request_click) -> {
       #(
         UiState(
           mode: state.mode,
-          lobby_mode_settings: LobbyModeSettings(Some(
-            on_computer_game_confirmation,
-          )),
+          lobby_mode_settings: LobbyModeSettings(
+            on_computer_game_request_click: Some(on_computer_game_request_click),
+          ),
           game_mode_settings: state.game_mode_settings,
           chessboard_interface: state.chessboard_interface,
         ),

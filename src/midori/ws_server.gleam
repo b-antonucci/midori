@@ -5,7 +5,8 @@ import mist.{type WebsocketConnection}
 import gleam/dict
 import midori/user_id.{type UserId}
 import midori/ws_server_message.{
-  type WebsocketServerMessage, AddConnection, RemoveConnection, Send,
+  type WebsocketServerMessage, AddConnection, CheckForExistingConnection,
+  RemoveConnection, Send,
 }
 
 pub type WebsocketServerState {
@@ -20,6 +21,11 @@ fn handle_message(
     Send(recipient, message) -> {
       let assert Ok(conn) = dict.get(state.connections, recipient)
       let assert Ok(_) = mist.send_text_frame(conn, message)
+      state
+    }
+    CheckForExistingConnection(client, user_id) -> {
+      let exists = dict.has_key(state.connections, user_id)
+      process.send(client, exists)
       state
     }
     AddConnection(recipient, connection) -> {
