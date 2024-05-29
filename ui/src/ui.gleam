@@ -56,7 +56,10 @@ pub type UiMode {
 }
 
 pub type LobbyModeSettings {
-  LobbyModeSettings(on_computer_game_request_click: Option(fn() -> Nil))
+  LobbyModeSettings(
+    on_computer_game_request_click: Option(fn() -> Nil),
+    computer_game_request_prompt_visibility: Bool,
+  )
 }
 
 pub type GameModeSettings {
@@ -75,6 +78,7 @@ pub type UiMsg {
   ShowPromotion(from: Position, to: Position)
   CallOnClick(PromotionMenuOptions)
   SetOnClick(fn(PromotionMenuClickData, Position, Position) -> Nil)
+  ShowRequestGameWithComputerPrompt
   RequestGameWithComputer
   SetOnComputerGameRequestClick(fn() -> Nil)
 }
@@ -255,6 +259,7 @@ pub fn main() {
       "{\"game_id\":" <> _ -> {
         let moves = get_data_field_object_as_array_js(message, "moves")
         let fen = get_data_field_js(message, "fen")
+        let game_id = get_data_field_js(message, "game_id")
         let moves_list = array.to_list(moves)
         let #(moves, promo_moves) =
           list.fold(moves_list, #([], []), fn(acc, item) {
@@ -295,6 +300,7 @@ pub fn main() {
             )
           })
 
+        set_pathname_js("/game/" <> game_id)
         ui_interface(dispatch(ChangeMode(GameMode)))
         interface(dispatch(ToggleVisibility))
         interface(dispatch(SetFen(fen)))
@@ -366,7 +372,7 @@ pub fn ui_init(
       from: None,
       to: None,
     )
-  let lobby_mode_settings = LobbyModeSettings(None)
+  let lobby_mode_settings = LobbyModeSettings(None, False)
   #(
     UiState(
       ui_mode,
@@ -464,6 +470,26 @@ pub fn ui_update(state: UiState, msg) {
         effect.none(),
       )
     }
+    ShowRequestGameWithComputerPrompt -> {
+      case state.mode {
+        LobbyMode -> {
+          let new_state =
+            UiState(
+              mode: state.mode,
+              lobby_mode_settings: LobbyModeSettings(
+                on_computer_game_request_click: state.lobby_mode_settings.on_computer_game_request_click,
+                computer_game_request_prompt_visibility: True,
+              ),
+              game_mode_settings: state.game_mode_settings,
+              chessboard_interface: state.chessboard_interface,
+            )
+          #(new_state, effect.none())
+        }
+        _ -> {
+          #(state, effect.none())
+        }
+      }
+    }
     RequestGameWithComputer -> {
       case state.mode {
         LobbyMode -> {
@@ -484,6 +510,7 @@ pub fn ui_update(state: UiState, msg) {
           mode: state.mode,
           lobby_mode_settings: LobbyModeSettings(
             on_computer_game_request_click: Some(on_computer_game_request_click),
+            computer_game_request_prompt_visibility: state.lobby_mode_settings.computer_game_request_prompt_visibility,
           ),
           game_mode_settings: state.game_mode_settings,
           chessboard_interface: state.chessboard_interface,
@@ -561,9 +588,38 @@ pub fn ui_view(state: UiState) {
           [text("shahmat.org")],
         ),
         html.br([]),
-        html.button([event.on("click", fn(_) { Ok(RequestGameWithComputer) })], [
-          text("PLAY WITH THE COMPUTER"),
-        ]),
+        case state.lobby_mode_settings.computer_game_request_prompt_visibility {
+          False -> {
+            html.button(
+              [
+                event.on("click", fn(_) {
+                  Ok(ShowRequestGameWithComputerPrompt)
+                }),
+              ],
+              [text("PLAY WITH THE COMPUTER")],
+            )
+          }
+          True -> {
+            html.div([], [
+              html.label(
+                [
+                  attribute.for("color-select"),
+                  attribute.style([#("color", "#bababa")]),
+                ],
+                [text("Color:")],
+              ),
+              html.select([attribute.id("color-select")], [
+                html.option([attribute.value("white")], "White"),
+                html.option([attribute.value("black")], "Black"),
+              ]),
+              html.br([]),
+              html.button(
+                [event.on("click", fn(_) { Ok(RequestGameWithComputer) })],
+                [text("Ready")],
+              ),
+            ])
+          }
+        },
       ])
     }
   }
