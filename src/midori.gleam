@@ -5,11 +5,11 @@ import gleam/dynamic.{field, string}
 import gleam/erlang/process.{type Subject}
 import gleam/http/request.{type Request, Request, get_cookies}
 import gleam/http/response.{type Response}
-import gleam/io
 import gleam/json.{array, object, string as json_string}
 import gleam/list
 import gleam/option.{None, Some}
 import gleam/otp/actor
+import gleam/otp/supervisor
 import gleam/result
 import midori/bot_server
 import midori/bot_server_message.{SetGameManagerSubject}
@@ -66,8 +66,19 @@ pub fn main() {
   wisp.configure_logger()
   let secret_key_base = wisp.random_string(64)
 
+  let subject = process.new_subject()
+
+  let bot_server_child_spec =
+    supervisor.worker(fn(_) { bot_server.start_bot_server(subject) })
+  let children = fn(children) {
+    children
+    |> supervisor.add(bot_server_child_spec)
+  }
+
+  let assert Ok(_) = supervisor.start(children)
+  let assert Ok(bot_server_subject) = process.receive(subject, 100)
+
   let assert Ok(ws_server_subject) = ws_server.start_ws_server()
-  let assert Ok(bot_server_subject) = bot_server.start_bot_server(option.None)
   let assert Ok(ping_server_subject) = ping_server.start_ping_server()
   let assert Ok(user_manager_subject) = user_manager.start_user_manager()
   let assert Ok(game_manager_subject) =

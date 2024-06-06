@@ -152,19 +152,20 @@ fn handle_message(
 }
 
 pub fn start_bot_server(
-  game_server_subject,
+  subject: Subject(Subject(BotServerMessage)),
 ) -> Result(Subject(BotServerMessage), _) {
   let assert Ok(actor) =
     actor.start(
       BotServerState(
         option.None,
-        game_server_subject,
+        option.None,
         option.None,
         queue.from_list([]),
         option.None,
       ),
       handle_message,
     )
+  process.send(subject, actor)
 
   let fairy_stockfish_command =
     Execve(["./fairy-stockfish-largeboard_x86-64-modern"])
