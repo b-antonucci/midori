@@ -1,6 +1,4 @@
 # midori
-Deployed at [shahmat.org](https://www.shahmat.org)
-
 Midori is a WIP real-time chess server and browser client.
 
 [gchess](https://github.com/byusti/gchess) provides chess logic.
