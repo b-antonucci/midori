@@ -140,7 +140,6 @@ pub fn main() {
 
   let ui_mode = case url_pathname {
     "/game/" <> game_id -> {
-      interface(dispatch(ToggleVisibility))
       // TODO: this NextTurn Dispatch is a hack because the on_message function calls
       // this same dispatch since it assumes that the arrival of a move signifies a change
       // of turns. That is not the case here since we are getting state of the game, and not
@@ -186,6 +185,7 @@ pub fn main() {
         after: Some(after),
         moves: None,
       )),
+      orientation: None,
     )
 
   interface(dispatch(Set(config)))
