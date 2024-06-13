@@ -87,8 +87,8 @@ export function ws_send_game_data_request_js(socket, message) {
   };
 }
 
-export function ws_request_game_with_computer_js(socket) {
-  var message = { type: "request_game_with_computer" };
+export function ws_request_game_with_computer_js(socket, color) {
+  var message = { type: "request_game_with_computer", color: color };
   socket.send(JSON.stringify(message));
 }
 
@@ -113,4 +113,8 @@ export function console_log_js(message) {
 
 export function url_pathname_js() {
   return window.location.pathname;
+}
+
+export function get_color_select_value_js() {
+  return document.getElementById("color-select").value;
 }

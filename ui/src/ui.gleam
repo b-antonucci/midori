@@ -57,7 +57,7 @@ pub type UiMode {
 
 pub type LobbyModeSettings {
   LobbyModeSettings(
-    on_computer_game_request_click: Option(fn() -> Nil),
+    on_computer_game_request_click: Option(fn(String) -> Nil),
     computer_game_request_prompt_visibility: Bool,
   )
 }
@@ -79,8 +79,8 @@ pub type UiMsg {
   CallOnClick(PromotionMenuOptions)
   SetOnClick(fn(PromotionMenuClickData, Position, Position) -> Nil)
   ShowRequestGameWithComputerPrompt
-  RequestGameWithComputer
-  SetOnComputerGameRequestClick(fn() -> Nil)
+  RequestGameWithComputer(color: String)
+  SetOnComputerGameRequestClick(fn(String) -> Nil)
 }
 
 @external(javascript, "./ffi.js", "alert_js")
@@ -105,7 +105,7 @@ pub fn ws_send_game_data_request_js(
 ) -> Nil
 
 @external(javascript, "./ffi.js", "ws_request_game_with_computer_js")
-pub fn ws_request_game_with_computer_js(socket: Websocket) -> Nil
+pub fn ws_request_game_with_computer_js(socket: Websocket, color: String) -> Nil
 
 @external(javascript, "./ffi.js", "ws_init_js")
 pub fn ws_init_js() -> Websocket
@@ -130,6 +130,9 @@ pub fn url_pathname_js() -> String
 
 @external(javascript, "./ffi.js", "set_pathname_js")
 pub fn set_pathname_js(pathname: String) -> Nil
+
+@external(javascript, "./ffi.js", "get_color_select_value_js")
+pub fn get_color_select_value_js() -> String
 
 pub fn main() {
   let socket = ws_init_js()
@@ -190,8 +193,8 @@ pub fn main() {
 
   interface(dispatch(Set(config)))
 
-  let on_computer_game_request_click = fn() {
-    ws_request_game_with_computer_js(socket)
+  let on_computer_game_request_click = fn(color) {
+    ws_request_game_with_computer_js(socket, color)
   }
 
   ui_interface(
@@ -490,13 +493,13 @@ pub fn ui_update(state: UiState, msg) {
         }
       }
     }
-    RequestGameWithComputer -> {
+    RequestGameWithComputer(color) -> {
       case state.mode {
         LobbyMode -> {
           // New game request logic
           let assert Some(on_computer_game_request_click) =
             state.lobby_mode_settings.on_computer_game_request_click
-          on_computer_game_request_click()
+          on_computer_game_request_click(color)
           #(state, effect.none())
         }
         _ -> {
@@ -614,7 +617,11 @@ pub fn ui_view(state: UiState) {
               ]),
               html.br([]),
               html.button(
-                [event.on("click", fn(_) { Ok(RequestGameWithComputer) })],
+                [
+                  event.on("click", fn(_) {
+                    Ok(RequestGameWithComputer(get_color_select_value_js()))
+                  }),
+                ],
                 [text("Ready")],
               ),
             ])
