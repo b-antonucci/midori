@@ -15,6 +15,7 @@ import midori/game_manager_message.{
   type GameInfo, type GameManagerMessage, ApplyAiMove, ApplyMove, ConfirmMove,
   GameInfo, GetGameInfo, NewGame, RemoveGame, Shutdown,
 }
+import midori/types.{type UserColor}
 import midori/ws_server_message.{type WebsocketServerMessage, Send}
 import move.{Normal}
 import piece.{Bishop, Knight, Queen, Rook}
@@ -22,10 +23,14 @@ import position
 
 pub type GameManagerState {
   GameManagerState(
-    game_map: Dict(String, Subject(Message)),
+    game_map: Dict(String, GameMetaInfo),
     bot_server_pid: Subject(BotServerMessage),
     ws_server_subject: Subject(WebsocketServerMessage),
   )
+}
+
+pub type GameMetaInfo {
+  GameMetaInfo(user_color: UserColor, game_subject: Subject(Message))
 }
 
 fn handle_message(
@@ -35,12 +40,15 @@ fn handle_message(
   case message {
     Shutdown -> actor.Stop(process.Normal)
     ApplyMove(client, game_id, user_id, move) -> {
-      let server_result = dict.get(state.game_map, game_id)
-      case server_result {
-        Ok(server) -> {
-          case game_server.apply_move_uci_string(server, move) {
+      let game_meta_info_result = dict.get(state.game_map, game_id)
+      case game_meta_info_result {
+        Ok(game_meta_info) -> {
+          case
+            game_server.apply_move_uci_string(game_meta_info.game_subject, move)
+          {
             Ok(_) -> {
-              let legal_moves = game_server.all_legal_moves(server)
+              let legal_moves =
+                game_server.all_legal_moves(game_meta_info.game_subject)
               let length = list.length(legal_moves)
               case length {
                 0 -> {
@@ -49,7 +57,7 @@ fn handle_message(
                   actor.continue(state)
                 }
                 _ -> {
-                  let fen = game_server.get_fen(server)
+                  let fen = game_server.get_fen(game_meta_info.game_subject)
 
                   process.send(
                     state.bot_server_pid,
@@ -75,13 +83,16 @@ fn handle_message(
       }
     }
     ApplyAiMove(game_id, user_id, move) -> {
-      let assert Ok(server) = dict.get(state.game_map, game_id)
-      let assert Ok(_) = game_server.apply_move_uci_string(server, move)
-      let fen = game_server.get_fen(server)
+      // TODO: remove this asserts in the future
+      let assert Ok(game_meta_info) = dict.get(state.game_map, game_id)
+      let assert Ok(_) =
+        game_server.apply_move_uci_string(game_meta_info.game_subject, move)
+      let fen = game_server.get_fen(game_meta_info.game_subject)
       // TODO: There should be a function called all_legal_moves_aggregated or something
       // that gives us the moves in the correct format instead of all this work we do here.
       // We are duplicating work by processing the moves twice.
-      let unformatted_moves = game_server.all_legal_moves(server)
+      let unformatted_moves =
+        game_server.all_legal_moves(game_meta_info.game_subject)
       let formatted_moves =
         list.fold(
           unformatted_moves,
@@ -128,7 +139,7 @@ fn handle_message(
 
       actor.continue(state)
     }
-    NewGame(client) -> {
+    NewGame(client, user_color) -> {
       let server = game_server.new_server()
       case server {
         Ok(server) -> {
@@ -142,7 +153,10 @@ fn handle_message(
               let game_id_result = uuid.generate_v7()
               case game_id_result {
                 Ok(game_id) -> {
-                  let game_map = dict.insert(state.game_map, game_id, server)
+                  let game_meta_info =
+                    GameMetaInfo(user_color: user_color, game_subject: server)
+                  let game_map =
+                    dict.insert(state.game_map, game_id, game_meta_info)
                   process.send(client, game_id_result)
                   actor.continue(GameManagerState(
                     game_map,
@@ -171,8 +185,9 @@ fn handle_message(
       }
     }
     RemoveGame(client, id) -> {
-      let assert Ok(server) = dict.get(state.game_map, id)
-      shutdown(server)
+      // TODO: remove this assert in the future
+      let assert Ok(game_meta_info) = dict.get(state.game_map, id)
+      shutdown(game_meta_info.game_subject)
       let game_map = dict.delete(state.game_map, id)
       process.send(client, Ok(Nil))
       actor.continue(GameManagerState(
@@ -183,15 +198,21 @@ fn handle_message(
     }
     GetGameInfo(client, id) -> {
       case dict.get(state.game_map, id) {
-        Ok(server) -> {
-          let fen = game_server.get_fen(server)
-          let status_option = game_server.get_status(server)
-          let moves = game_server.all_legal_moves(server)
+        Ok(game_meta_info) -> {
+          let fen = game_server.get_fen(game_meta_info.game_subject)
+          let status_option =
+            game_server.get_status(game_meta_info.game_subject)
+          let moves = game_server.all_legal_moves(game_meta_info.game_subject)
           case status_option {
             Some(status) -> {
               process.send(
                 client,
-                Ok(GameInfo(fen: fen, status: status, moves: moves)),
+                Ok(GameInfo(
+                  fen: fen,
+                  status: status,
+                  moves: moves,
+                  user_color: game_meta_info.user_color,
+                )),
               )
               actor.continue(state)
             }

@@ -23,6 +23,7 @@ import midori/game_manager_message.{
 }
 import midori/ping_server.{type PingServerMessage}
 import midori/router
+import midori/types
 import midori/uci_move.{convert_move}
 import midori/user_manager
 import midori/user_manager_message.{
@@ -291,6 +292,7 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                         RequestGameData(
                           moves: formatted_moves,
                           fen: game_manager_response.fen,
+                          user_color: game_manager_response.user_color,
                         )
                       let json = update_game_message_to_json(game_data_message)
 
@@ -383,6 +385,12 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                           let json =
                             json.to_string(
                               json.object([
+                                #(
+                                  "type",
+                                  json.string(
+                                    "request_game_with_computer_existing",
+                                  ),
+                                ),
                                 #("game_id", json.string(game_id)),
                                 #("fen", json.string(game_info.fen)),
                                 #("moves", object(moves_with_json_dests)),
@@ -403,76 +411,115 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                             )
                           {
                             Ok(_) -> {
-                              case
-                                process.call(
-                                  game_manager_subject,
-                                  NewGame,
-                                  1000,
+                              let message_decoder =
+                                dynamic.decode1(
+                                  RequestGameWithComputerMessage,
+                                  field("color", string),
                                 )
-                              {
-                                Ok(new_game_id) -> {
-                                  case
-                                    process.call(
-                                      user_manager_subject,
-                                      AddGameToUser(_, id, new_game_id),
-                                      1000,
-                                    )
-                                  {
-                                    Ok(_) -> {
-                                      let get_game_info_result =
+                              case json.decode(ws_message, message_decoder) {
+                                Ok(RequestGameWithComputerMessage(user_color)) -> {
+                                  let user_color = case user_color {
+                                    "white" -> Some(types.White)
+                                    "black" -> Some(types.Black)
+                                    _ -> None
+                                  }
+
+                                  case user_color {
+                                    Some(user_color) -> {
+                                      case
                                         process.call(
                                           game_manager_subject,
-                                          GetGameInfo(_, new_game_id),
+                                          NewGame(_, user_color),
                                           1000,
                                         )
-                                      case get_game_info_result {
-                                        Ok(game_info) -> {
-                                          let moves =
-                                            format_move(game_info.moves)
-                                          let moves = moves.moves
-                                          let moves_with_json_dests =
-                                            list.map(moves, fn(move) {
-                                              #(
-                                                move.0,
-                                                array(move.1, of: json_string),
-                                              )
-                                            })
-                                          let json =
-                                            json.to_string(
-                                              json.object([
-                                                #(
-                                                  "game_id",
-                                                  json.string(new_game_id),
-                                                ),
-                                                #(
-                                                  "fen",
-                                                  json.string(game_info.fen),
-                                                ),
-                                                #(
-                                                  "moves",
-                                                  object(moves_with_json_dests),
-                                                ),
-                                              ]),
-                                            )
+                                      {
+                                        Ok(new_game_id) -> {
                                           case
-                                            mist.send_text_frame(conn, json)
+                                            process.call(
+                                              user_manager_subject,
+                                              AddGameToUser(_, id, new_game_id),
+                                              1000,
+                                            )
                                           {
-                                            Ok(_) -> actor.continue(state)
-                                            Error(_) -> actor.continue(state)
+                                            Ok(_) -> {
+                                              let get_game_info_result =
+                                                process.call(
+                                                  game_manager_subject,
+                                                  GetGameInfo(_, new_game_id),
+                                                  1000,
+                                                )
+                                              case get_game_info_result {
+                                                Ok(game_info) -> {
+                                                  let moves =
+                                                    format_move(game_info.moves)
+                                                  let moves = moves.moves
+                                                  let moves_with_json_dests =
+                                                    list.map(moves, fn(move) {
+                                                      #(
+                                                        move.0,
+                                                        array(
+                                                          move.1,
+                                                          of: json_string,
+                                                        ),
+                                                      )
+                                                    })
+                                                  let json =
+                                                    json.to_string(
+                                                      json.object([
+                                                        #(
+                                                          "game_id",
+                                                          json.string(
+                                                            new_game_id,
+                                                          ),
+                                                        ),
+                                                        #(
+                                                          "fen",
+                                                          json.string(
+                                                            game_info.fen,
+                                                          ),
+                                                        ),
+                                                        #(
+                                                          "moves",
+                                                          object(
+                                                            moves_with_json_dests,
+                                                          ),
+                                                        ),
+                                                      ]),
+                                                    )
+                                                  case
+                                                    mist.send_text_frame(
+                                                      conn,
+                                                      json,
+                                                    )
+                                                  {
+                                                    Ok(_) ->
+                                                      actor.continue(state)
+                                                    Error(_) ->
+                                                      actor.continue(state)
+                                                  }
+                                                  actor.continue(state)
+                                                }
+                                                Error(_msg) -> {
+                                                  actor.continue(state)
+                                                }
+                                              }
+                                            }
+                                            Error(_msg) -> {
+                                              actor.continue(state)
+                                            }
                                           }
-                                          actor.continue(state)
                                         }
                                         Error(_msg) -> {
                                           actor.continue(state)
                                         }
                                       }
                                     }
-                                    Error(_msg) -> {
+                                    None -> {
                                       actor.continue(state)
                                     }
                                   }
                                 }
-                                Error(_msg) -> {
+                                Error(_) -> {
                                   actor.continue(state)
                                 }
                               }
@@ -496,48 +543,76 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                       field("color", string),
                     )
                   case json.decode(ws_message, message_decoder) {
-                    Ok(RequestGameWithComputerMessage(_color)) -> {
-                      case process.call(game_manager_subject, NewGame, 1000) {
-                        Ok(game_id) -> {
+                    Ok(RequestGameWithComputerMessage(user_color)) -> {
+                      let user_color = case user_color {
+                        "white" -> Some(types.White)
+                        "black" -> Some(types.Black)
+                        _ -> None
+                      }
+
+                      case user_color {
+                        Some(user_color) ->
                           case
                             process.call(
-                              user_manager_subject,
-                              AddGameToUser(_, id, game_id),
+                              game_manager_subject,
+                              NewGame(_, user_color),
                               1000,
                             )
                           {
-                            Ok(_) -> {
-                              let get_game_info_result =
+                            Ok(game_id) -> {
+                              case
                                 process.call(
-                                  game_manager_subject,
-                                  GetGameInfo(_, game_id),
+                                  user_manager_subject,
+                                  AddGameToUser(_, id, game_id),
                                   1000,
                                 )
-                              case get_game_info_result {
-                                Ok(game_info) -> {
-                                  let fen = game_info.fen
-                                  let moves = format_move(game_info.moves)
-                                  let moves = moves.moves
-                                  let moves_with_json_dests =
-                                    list.map(moves, fn(move) {
-                                      #(move.0, array(move.1, of: json_string))
-                                    })
-                                  let json =
-                                    json.to_string(
-                                      json.object([
-                                        #("game_id", json.string(game_id)),
-                                        #("fen", json.string(fen)),
-                                        #(
-                                          "moves",
-                                          object(moves_with_json_dests),
-                                        ),
-                                      ]),
+                              {
+                                Ok(_) -> {
+                                  let get_game_info_result =
+                                    process.call(
+                                      game_manager_subject,
+                                      GetGameInfo(_, game_id),
+                                      1000,
                                     )
-                                  case mist.send_text_frame(conn, json) {
-                                    Ok(_) -> actor.continue(state)
-                                    Error(_) -> actor.continue(state)
+                                  case get_game_info_result {
+                                    Ok(game_info) -> {
+                                      let fen = game_info.fen
+                                      let moves = format_move(game_info.moves)
+                                      let moves = moves.moves
+                                      let moves_with_json_dests =
+                                        list.map(moves, fn(move) {
+                                          #(
+                                            move.0,
+                                            array(move.1, of: json_string),
+                                          )
+                                        })
+                                      let json =
+                                        json.to_string(
+                                          json.object([
+                                            #(
+                                              "type",
+                                              json.string(
+                                                "request_game_with_computer_confirm",
+                                              ),
+                                            ),
+                                            #("game_id", json.string(game_id)),
+                                            #("fen", json.string(fen)),
+                                            #(
+                                              "moves",
+                                              object(moves_with_json_dests),
+                                            ),
+                                          ]),
+                                        )
+                                      case mist.send_text_frame(conn, json) {
+                                        Ok(_) -> actor.continue(state)
+                                        Error(_) -> actor.continue(state)
+                                      }
+                                      actor.continue(state)
+                                    }
+                                    Error(_msg) -> {
+                                      actor.continue(state)
+                                    }
                                   }
-                                  actor.continue(state)
                                 }
                                 Error(_msg) -> {
                                   actor.continue(state)
@@ -548,8 +623,7 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                               actor.continue(state)
                             }
                           }
-                        }
-                        Error(_msg) -> {
+                        None -> {
                           actor.continue(state)
                         }
                       }
