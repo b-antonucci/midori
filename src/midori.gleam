@@ -1,3 +1,5 @@
+import color.{Black, White}
+import fen
 import gleam/bit_array.{base64_decode}
 import gleam/bytes_builder
 import gleam/dict
@@ -23,7 +25,6 @@ import midori/game_manager_message.{
 }
 import midori/ping_server.{type PingServerMessage}
 import midori/router
-import midori/types
 import midori/uci_move.{convert_move}
 import midori/user_manager
 import midori/user_manager_message.{
@@ -216,6 +217,7 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
           actor.continue(state)
         }
         mist.Text(ws_message) -> {
+          // TODO: VERY IMPORT DO THIS SOON, put all of this in a seperate function that returns a result so that we can leverage the use keyword
           case ws_message {
             "{\"type\":\"request_game_data\"" <> _ -> {
               let message_decoder =
@@ -375,13 +377,32 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                     Ok(game_info) -> {
                       case game_info.status {
                         status.InProgress(_, _) -> {
-                          let moves = format_move(game_info.moves)
-                          let moves = moves.moves
+                          let turn = fen.from_string(game_info.fen).turn
+                          let is_user_turn = case turn {
+                            White -> game_info.user_color == White
+                            Black -> game_info.user_color == Black
+                          }
+                          let moves = case is_user_turn {
+                            True -> {
+                              format_move(game_info.moves).moves
+                            }
+                            False -> []
+                          }
                           let moves_with_json_dests =
                             list.map(moves, fn(move) {
                               #(move.0, array(move.1, of: json_string))
                             })
 
+                          let user_color_string = case game_info.user_color {
+                            White -> "white"
+                            Black -> "black"
+                          }
+
+                          let turn_string = case turn {
+                            White -> "white"
+                            Black -> "black"
+                          }
+                          // TODO: ws message creation should be in client_ws_message.gleam
                           let json =
                             json.to_string(
                               json.object([
@@ -393,6 +414,8 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                                 ),
                                 #("game_id", json.string(game_id)),
                                 #("fen", json.string(game_info.fen)),
+                                #("user_color", json.string(user_color_string)),
+                                #("turn", json.string(turn_string)),
                                 #("moves", object(moves_with_json_dests)),
                               ]),
                             )
@@ -419,8 +442,8 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                               case json.decode(ws_message, message_decoder) {
                                 Ok(RequestGameWithComputerMessage(user_color)) -> {
                                   let user_color = case user_color {
-                                    "white" -> Some(types.White)
-                                    "black" -> Some(types.Black)
+                                    "white" -> Some(color.White)
+                                    "black" -> Some(color.Black)
                                     _ -> None
                                   }
 
@@ -450,9 +473,28 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                                                 )
                                               case get_game_info_result {
                                                 Ok(game_info) -> {
-                                                  let moves =
-                                                    format_move(game_info.moves)
-                                                  let moves = moves.moves
+                                                  let turn =
+                                                    fen.from_string(
+                                                      game_info.fen,
+                                                    ).turn
+                                                  let is_user_turn = case turn {
+                                                    White ->
+                                                      game_info.user_color
+                                                      == White
+                                                    Black ->
+                                                      game_info.user_color
+                                                      == Black
+                                                  }
+                                                  let moves = case
+                                                    is_user_turn
+                                                  {
+                                                    True -> {
+                                                      format_move(
+                                                        game_info.moves,
+                                                      ).moves
+                                                    }
+                                                    False -> []
+                                                  }
                                                   let moves_with_json_dests =
                                                     list.map(moves, fn(move) {
                                                       #(
@@ -463,6 +505,17 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                                                         ),
                                                       )
                                                     })
+                                                  let user_color_string = case
+                                                    game_info.user_color
+                                                  {
+                                                    White -> "white"
+                                                    Black -> "black"
+                                                  }
+                                                  let turn_string = case turn {
+                                                    White -> "white"
+                                                    Black -> "black"
+                                                  }
+                                                  // TODO: ws message creation should be in client_ws_message.gleam
                                                   let json =
                                                     json.to_string(
                                                       json.object([
@@ -476,6 +529,18 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                                                           "fen",
                                                           json.string(
                                                             game_info.fen,
+                                                          ),
+                                                        ),
+                                                        #(
+                                                          "user_color",
+                                                          json.string(
+                                                            user_color_string,
+                                                          ),
+                                                        ),
+                                                        #(
+                                                          "turn",
+                                                          json.string(
+                                                            turn_string,
                                                           ),
                                                         ),
                                                         #(
@@ -545,8 +610,8 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                   case json.decode(ws_message, message_decoder) {
                     Ok(RequestGameWithComputerMessage(user_color)) -> {
                       let user_color = case user_color {
-                        "white" -> Some(types.White)
-                        "black" -> Some(types.Black)
+                        "white" -> Some(color.White)
+                        "black" -> Some(color.Black)
                         _ -> None
                       }
 
@@ -577,8 +642,18 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                                   case get_game_info_result {
                                     Ok(game_info) -> {
                                       let fen = game_info.fen
-                                      let moves = format_move(game_info.moves)
-                                      let moves = moves.moves
+                                      let turn =
+                                        fen.from_string(game_info.fen).turn
+                                      let is_user_turn = case turn {
+                                        White -> game_info.user_color == White
+                                        Black -> game_info.user_color == Black
+                                      }
+                                      let moves = case is_user_turn {
+                                        True -> {
+                                          format_move(game_info.moves).moves
+                                        }
+                                        False -> []
+                                      }
                                       let moves_with_json_dests =
                                         list.map(moves, fn(move) {
                                           #(
@@ -586,6 +661,17 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                                             array(move.1, of: json_string),
                                           )
                                         })
+                                      let user_color_string = case
+                                        game_info.user_color
+                                      {
+                                        White -> "white"
+                                        Black -> "black"
+                                      }
+                                      let turn_string = case turn {
+                                        White -> "white"
+                                        Black -> "black"
+                                      }
+                                      // TODO: ws message creation should be in client_ws_message.gleam
                                       let json =
                                         json.to_string(
                                           json.object([
@@ -597,6 +683,11 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                                             ),
                                             #("game_id", json.string(game_id)),
                                             #("fen", json.string(fen)),
+                                            #(
+                                              "user_color",
+                                              json.string(user_color_string),
+                                            ),
+                                            #("turn", json.string(turn_string)),
                                             #(
                                               "moves",
                                               object(moves_with_json_dests),

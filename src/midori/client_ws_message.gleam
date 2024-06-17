@@ -1,6 +1,7 @@
+import color.{type Color}
+import fen.{from_string}
 import gleam/json.{array, object, string as json_string}
 import gleam/list
-import midori/types
 import midori/uci_move
 
 // The first element of the tuple is the origin square
@@ -12,11 +13,7 @@ pub type ClientFormatMoveList {
 pub type ClientWebsocketMessage {
   ConfirmMove(move: uci_move.UciMove)
   BotMove(moves: ClientFormatMoveList, fen: String)
-  RequestGameData(
-    moves: ClientFormatMoveList,
-    fen: String,
-    user_color: types.UserColor,
-  )
+  RequestGameData(moves: ClientFormatMoveList, fen: String, user_color: Color)
 }
 
 pub fn update_game_message_to_json(
@@ -40,10 +37,24 @@ pub fn update_game_message_to_json(
     RequestGameData(moves, fen, user_color) -> {
       // TODO: this needs to be labeled as a response to a game data request
       let user_color = case user_color {
-        types.White -> "white"
-        types.Black -> "black"
+        color.White -> "white"
+        color.Black -> "black"
       }
-      let moves = moves.moves
+      let turn = from_string(fen).turn
+      let is_user_turn = case turn {
+        color.White -> user_color == "white"
+        color.Black -> user_color == "black"
+      }
+      let moves = case is_user_turn {
+        True -> {
+          moves.moves
+        }
+        False -> []
+      }
+      let turn_string = case turn {
+        color.White -> "white"
+        color.Black -> "black"
+      }
       let moves_with_json_dests =
         list.map(moves, fn(move) { #(move.0, array(move.1, of: json_string)) })
       object([
@@ -51,6 +62,7 @@ pub fn update_game_message_to_json(
         #("moves", object(moves_with_json_dests)),
         #("fen", json_string(fen)),
         #("user_color", json_string(user_color)),
+        #("turn", json_string(turn_string)),
       ])
       |> json.to_string
     }

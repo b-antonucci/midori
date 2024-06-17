@@ -1,3 +1,4 @@
+import color.{type Color}
 import game_server.{type Message, new_game_from_fen, shutdown}
 import gleam/dict.{type Dict}
 import gleam/dynamic.{list}
@@ -15,7 +16,6 @@ import midori/game_manager_message.{
   type GameInfo, type GameManagerMessage, ApplyAiMove, ApplyMove, ConfirmMove,
   GameInfo, GetGameInfo, NewGame, RemoveGame, Shutdown,
 }
-import midori/types.{type UserColor}
 import midori/ws_server_message.{type WebsocketServerMessage, Send}
 import move.{Normal}
 import piece.{Bishop, Knight, Queen, Rook}
@@ -30,7 +30,7 @@ pub type GameManagerState {
 }
 
 pub type GameMetaInfo {
-  GameMetaInfo(user_color: UserColor, game_subject: Subject(Message))
+  GameMetaInfo(user_color: Color, game_subject: Subject(Message))
 }
 
 fn handle_message(
