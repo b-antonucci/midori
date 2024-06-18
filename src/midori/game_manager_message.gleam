@@ -16,7 +16,11 @@ pub type GameManagerMessage {
   // if only to get confirmation that the message was received
   ApplyAiMove(game_id: String, user_id: String, move: String)
   // TODO: rename this to NewComputerGame or something like that
-  NewGame(reply_with: Subject(Result(String, String)), user_color: Color)
+  NewGame(
+    reply_with: Subject(Result(String, String)),
+    user_color: Color,
+    user_id: String,
+  )
   RemoveGame(reply_with: Subject(Result(Nil, Nil)), id: String)
   GetGameInfo(reply_with: Subject(Result(GameInfo, String)), id: String)
 }

@@ -57,8 +57,6 @@ fn handle_message(
                   }
                   let assert Some(game_server_subject) =
                     state.game_server_subject
-                  // artifically slow down the bot
-                  process.sleep(10_000)
                   process.send(
                     game_server_subject,
                     ApplyAiMove(

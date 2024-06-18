@@ -452,7 +452,7 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                                       case
                                         process.call(
                                           game_manager_subject,
-                                          NewGame(_, user_color),
+                                          NewGame(_, user_color, id),
                                           1000,
                                         )
                                       {
@@ -620,7 +620,7 @@ fn handle_ws_message(state: ConnectionState, conn, message) {
                           case
                             process.call(
                               game_manager_subject,
-                              NewGame(_, user_color),
+                              NewGame(_, user_color, id),
                               1000,
                             )
                           {

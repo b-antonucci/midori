@@ -139,7 +139,7 @@ fn handle_message(
 
       actor.continue(state)
     }
-    NewGame(client, user_color) -> {
+    NewGame(client, user_color, user_id) -> {
       let server = game_server.new_server()
       case server {
         Ok(server) -> {
@@ -158,6 +158,20 @@ fn handle_message(
                   let game_map =
                     dict.insert(state.game_map, game_id, game_meta_info)
                   process.send(client, game_id_result)
+                  case user_color {
+                    color.White -> Nil
+                    color.Black -> {
+                      process.send(
+                        state.bot_server_pid,
+                        RequestBotMove(
+                          gameid: game_id,
+                          user_id: user_id,
+                          fen: "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1",
+                        ),
+                      )
+                    }
+                  }
+
                   actor.continue(GameManagerState(
                     game_map,
                     state.bot_server_pid,

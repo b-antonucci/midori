@@ -1,7 +1,7 @@
 import config.{type Config, Config, Moveable}
 import gchessboard.{
-  type Msg, HideBoard, NextTurn, Set, SetFen, SetMoves, SetOrientation,
-  SetPromotions, SetTurn, ShowBoard, init, update, view,
+  type Msg, HideBoard, NextTurn, Set, SetFen, SetMoves, SetPromotions, SetTurn,
+  ShowBoard, init, update, view,
 }
 import gleam/dict
 import gleam/javascript/array.{type Array}
@@ -14,7 +14,9 @@ import lustre/effect
 import lustre/element/html.{div, text}
 import lustre/event
 import position.{type Position, Position, from_string}
-import types.{type MoveData, type Origin, BlackOriented, White, WhiteOriented}
+import types.{
+  type MoveData, type Origin, Black, BlackOriented, White, WhiteOriented,
+}
 
 pub type Websocket
 
@@ -251,8 +253,8 @@ pub fn main() {
         interface(dispatch(SetFen(fen)))
         interface(dispatch(SetMoves(moves)))
         interface(dispatch(SetPromotions(promo_moves)))
-        interface(dispatch(ShowBoard))
         interface(dispatch(NextTurn))
+        interface(dispatch(ShowBoard))
         Nil
       }
       "{\"type\":\"request_game_data_response\"" <> _ -> {
@@ -267,6 +269,17 @@ pub fn main() {
           }
           _ -> {
             None
+          }
+        }
+        let turn = case get_data_field_js(message, "turn") {
+          "white" -> {
+            White
+          }
+          "black" -> {
+            Black
+          }
+          _ -> {
+            panic as "Invalid turn"
           }
         }
         let moves_list = array.to_list(moves_array)
@@ -308,12 +321,31 @@ pub fn main() {
               list.append(acc.1, dict.to_list(promo_destinations)),
             )
           })
-        interface(dispatch(SetFen(fen)))
-        interface(dispatch(SetMoves(moves)))
-        interface(dispatch(SetPromotions(promo_moves)))
-        interface(dispatch(SetOrientation(user_color)))
+        let player = case user_color {
+          Some(WhiteOriented) -> {
+            White
+          }
+          Some(BlackOriented) -> {
+            types.Black
+          }
+          _ -> {
+            types.Both
+          }
+        }
+        let config =
+          Config(
+            moveable: Some(Moveable(
+              player: Some(player),
+              promotions: Some(promo_moves),
+              fen: Some(fen),
+              after: None,
+              moves: Some(moves),
+            )),
+            orientation: user_color,
+          )
+        interface(dispatch(Set(config)))
+        interface(dispatch(SetTurn(turn)))
         interface(dispatch(ShowBoard))
-        interface(dispatch(NextTurn))
         Nil
       }
       "{\"type\":\"request_game_data\",\"error\":\"dne\"}" -> {
@@ -325,6 +357,17 @@ pub fn main() {
       | "{\"type\":\"request_game_with_computer_existing\"" <> _ -> {
         let moves = get_data_field_object_as_array_js(message, "moves")
         let fen = get_data_field_js(message, "fen")
+        let turn = case get_data_field_js(message, "turn") {
+          "white" -> {
+            White
+          }
+          "black" -> {
+            Black
+          }
+          _ -> {
+            panic as "Invalid turn"
+          }
+        }
         let user_color = case get_data_field_js(message, "user_color") {
           "white" -> {
             Some(WhiteOriented)
@@ -379,12 +422,31 @@ pub fn main() {
 
         set_pathname_js("/game/" <> game_id)
         ui_interface(dispatch(ChangeMode(GameMode)))
-        interface(dispatch(SetOrientation(user_color)))
+        let player = case user_color {
+          Some(WhiteOriented) -> {
+            White
+          }
+          Some(BlackOriented) -> {
+            types.Black
+          }
+          _ -> {
+            types.Both
+          }
+        }
+        let config =
+          Config(
+            moveable: Some(Moveable(
+              player: Some(player),
+              promotions: Some(promo_moves),
+              fen: Some(fen),
+              after: None,
+              moves: Some(moves),
+            )),
+            orientation: user_color,
+          )
+        interface(dispatch(Set(config)))
+        interface(dispatch(SetTurn(turn)))
         interface(dispatch(ShowBoard))
-        interface(dispatch(SetFen(fen)))
-        interface(dispatch(SetMoves(moves)))
-        interface(dispatch(SetPromotions(promo_moves)))
-        interface(dispatch(SetTurn(types.White)))
       }
       _ws_message -> {
         let _move = get_data_field_js(message, "move")
