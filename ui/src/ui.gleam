@@ -136,6 +136,9 @@ pub fn set_pathname_js(pathname: String) -> Nil
 @external(javascript, "./ffi.js", "get_color_select_value_js")
 pub fn get_color_select_value_js() -> String
 
+@external(javascript, "./ffi.js", "console_log_js")
+pub fn console_log_js(message: String) -> Nil
+
 pub fn main() {
   let socket = ws_init_js()
   let app = application(init, update, view)
@@ -226,7 +229,7 @@ pub fn main() {
             }
             let origin: Origin = from_string(origin)
             let #(destinations, promo_destinations) =
-              list.fold(destinations, #([], dict.new()), fn(acc, item) {
+              list.fold(destinations, #([], []), fn(acc, item) {
                 case string.length(item) {
                   2 -> {
                     let destination = from_string(item)
@@ -237,7 +240,7 @@ pub fn main() {
                     #(
                       list.prepend(acc.0, destination),
                       // TODO: check if dict is empty first? is there a better way to do this?
-                      dict.insert(acc.1, origin, destination),
+                      list.prepend(acc.1, #(origin, destination)),
                     )
                   }
                   _ -> {
@@ -247,7 +250,7 @@ pub fn main() {
               })
             #(
               list.prepend(acc.0, #(origin, destinations)),
-              list.append(acc.1, dict.to_list(promo_destinations)),
+              list.append(acc.1, promo_destinations),
             )
           })
         interface(dispatch(SetFen(fen)))

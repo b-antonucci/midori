@@ -1,4 +1,5 @@
 import color.{type Color}
+import fen.{from_string}
 import game_server.{type Message, new_game_from_fen, shutdown}
 import gleam/dict.{type Dict}
 import gleam/dynamic.{list}
@@ -43,37 +44,54 @@ fn handle_message(
       let game_meta_info_result = dict.get(state.game_map, game_id)
       case game_meta_info_result {
         Ok(game_meta_info) -> {
-          case
-            game_server.apply_move_uci_string(game_meta_info.game_subject, move)
-          {
-            Ok(_) -> {
-              let legal_moves =
-                game_server.all_legal_moves(game_meta_info.game_subject)
-              let length = list.length(legal_moves)
-              case length {
-                0 -> {
-                  let response = ConfirmMove(move)
-                  process.send(client, Ok(response))
-                  actor.continue(state)
+          let fen = game_server.get_fen(game_meta_info.game_subject)
+          let turn = from_string(fen).turn
+          let is_user_turn = case game_meta_info.user_color {
+            color.White -> turn == color.White
+            color.Black -> turn == color.Black
+          }
+          case is_user_turn {
+            False -> actor.continue(state)
+            True ->
+              case
+                game_server.apply_move_uci_string(
+                  game_meta_info.game_subject,
+                  move,
+                )
+              {
+                Ok(_) -> {
+                  let legal_moves =
+                    game_server.all_legal_moves(game_meta_info.game_subject)
+                  let length = list.length(legal_moves)
+                  case length {
+                    0 -> {
+                      let response = ConfirmMove(move)
+                      process.send(client, Ok(response))
+                      actor.continue(state)
+                    }
+                    _ -> {
+                      let fen = game_server.get_fen(game_meta_info.game_subject)
+
+                      process.send(
+                        state.bot_server_pid,
+                        RequestBotMove(
+                          gameid: game_id,
+                          user_id: user_id,
+                          fen: fen,
+                        ),
+                      )
+
+                      let response = ConfirmMove(move)
+                      process.send(client, Ok(response))
+                      actor.continue(state)
+                    }
+                  }
                 }
-                _ -> {
-                  let fen = game_server.get_fen(game_meta_info.game_subject)
-
-                  process.send(
-                    state.bot_server_pid,
-                    RequestBotMove(gameid: game_id, user_id: user_id, fen: fen),
-                  )
-
-                  let response = ConfirmMove(move)
-                  process.send(client, Ok(response))
+                Error(_) -> {
+                  process.send(client, Error("Invalid move"))
                   actor.continue(state)
                 }
               }
-            }
-            Error(_) -> {
-              process.send(client, Error("Invalid move"))
-              actor.continue(state)
-            }
           }
         }
         Error(_) -> {
