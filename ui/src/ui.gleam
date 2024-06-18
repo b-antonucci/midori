@@ -1,7 +1,7 @@
 import config.{type Config, Config, Moveable}
 import gchessboard.{
-  type Msg, HideBoard, NextTurn, Set, SetFen, SetMoves, SetPromotions, SetTurn,
-  ShowBoard, init, update, view,
+  type Msg, HideBoard, NextTurn, Set, SetFen, SetMoves, SetOrientation,
+  SetPromotions, SetTurn, ShowBoard, init, update, view,
 }
 import gleam/dict
 import gleam/javascript/array.{type Array}
@@ -14,7 +14,7 @@ import lustre/effect
 import lustre/element/html.{div, text}
 import lustre/event
 import position.{type Position, Position, from_string}
-import types.{type MoveData, type Origin, White}
+import types.{type MoveData, type Origin, BlackOriented, White, WhiteOriented}
 
 pub type Websocket
 
@@ -206,7 +206,7 @@ pub fn main() {
       "pong" -> {
         Nil
       }
-      "{\"moves\":" <> _ | "{\"type\":\"request_game_data_response\"" <> _ -> {
+      "{\"moves\":" <> _ -> {
         let moves_array = get_data_field_object_as_array_js(message, "moves")
         let fen = get_data_field_js(message, "fen")
         let moves_list = array.to_list(moves_array)
@@ -255,6 +255,67 @@ pub fn main() {
         interface(dispatch(NextTurn))
         Nil
       }
+      "{\"type\":\"request_game_data_response\"" <> _ -> {
+        let moves_array = get_data_field_object_as_array_js(message, "moves")
+        let fen = get_data_field_js(message, "fen")
+        let user_color = case get_data_field_js(message, "user_color") {
+          "white" -> {
+            Some(WhiteOriented)
+          }
+          "black" -> {
+            Some(BlackOriented)
+          }
+          _ -> {
+            None
+          }
+        }
+        let moves_list = array.to_list(moves_array)
+        let #(moves, promo_moves) =
+          list.fold(moves_list, #([], []), fn(acc, item) {
+            let move_set_list = array.to_list(item)
+            let assert Ok(origin) = list.first(move_set_list)
+            let destinations = case move_set_list {
+              [_, ..destinations] -> {
+                destinations
+              }
+              _ -> {
+                panic as "Invalid move set"
+              }
+            }
+            let origin: Origin = from_string(origin)
+            let #(destinations, promo_destinations) =
+              list.fold(destinations, #([], dict.new()), fn(acc, item) {
+                case string.length(item) {
+                  2 -> {
+                    let destination = from_string(item)
+                    #(list.prepend(acc.0, destination), acc.1)
+                  }
+                  3 -> {
+                    let destination = from_string(string.slice(item, 0, 2))
+                    #(
+                      list.prepend(acc.0, destination),
+                      // TODO: check if dict is empty first? is there a better way to do this?
+                      dict.insert(acc.1, origin, destination),
+                    )
+                  }
+                  _ -> {
+                    panic as "Invalid destination"
+                  }
+                }
+              })
+            #(
+              list.prepend(acc.0, #(origin, destinations)),
+              list.append(acc.1, dict.to_list(promo_destinations)),
+            )
+          })
+        interface(dispatch(SetFen(fen)))
+        interface(dispatch(SetMoves(moves)))
+        interface(dispatch(SetPromotions(promo_moves)))
+        interface(dispatch(SetOrientation(user_color)))
+        interface(dispatch(ShowBoard))
+        interface(dispatch(NextTurn))
+        Nil
+      }
       "{\"type\":\"request_game_data\",\"error\":\"dne\"}" -> {
         set_pathname_js("/")
         ui_interface(dispatch(ChangeMode(LobbyMode)))
@@ -264,6 +325,17 @@ pub fn main() {
       | "{\"type\":\"request_game_with_computer_existing\"" <> _ -> {
         let moves = get_data_field_object_as_array_js(message, "moves")
         let fen = get_data_field_js(message, "fen")
+        let user_color = case get_data_field_js(message, "user_color") {
+          "white" -> {
+            Some(WhiteOriented)
+          }
+          "black" -> {
+            Some(BlackOriented)
+          }
+          _ -> {
+            None
+          }
+        }
         let game_id = get_data_field_js(message, "game_id")
         let moves_list = array.to_list(moves)
         let #(moves, promo_moves) =
@@ -307,6 +379,7 @@ pub fn main() {
 
         set_pathname_js("/game/" <> game_id)
         ui_interface(dispatch(ChangeMode(GameMode)))
+        interface(dispatch(SetOrientation(user_color)))
         interface(dispatch(ShowBoard))
         interface(dispatch(SetFen(fen)))
         interface(dispatch(SetMoves(moves)))
